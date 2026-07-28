@@ -1,0 +1,10 @@
+__pycache__/
+build/build/
+dist/M_*.exe
+dist/x*.exe
+dist/old*.exe
+dist/MyVPN_*.exe
+*.log
+logs/
+myvpn.log
+*.pyc
