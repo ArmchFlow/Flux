@@ -60,6 +60,7 @@ class MainWindow(QMainWindow):
         self._ping_timer.start(10000)
 
         self._servers_tab.load_servers()
+        self._on_ping_servers("__all__")
         self.set_connected(False)
 
         if self.settings_mgr.settings.minimize_to_tray:
@@ -83,16 +84,16 @@ class MainWindow(QMainWindow):
 
         self._tabs = QTabWidget()
 
-        self._sub_tab = SubscriptionTab(self.sub_manager)
-        self._sub_tab.update_requested.connect(self._on_update_sub)
-        self._sub_tab.add_requested.connect(self._on_add_sub)
-        self._tabs.addTab(self._sub_tab, "  Subscriptions  ")
-
         self._servers_tab = ServersTab(self.sub_manager)
         self._servers_tab.connect_requested.connect(self._on_server_selected)
         self._servers_tab.disconnect_requested.connect(self._on_disconnect)
         self._servers_tab.ping_requested.connect(self._on_ping_servers)
         self._tabs.addTab(self._servers_tab, "  Servers  ")
+
+        self._sub_tab = SubscriptionTab(self.sub_manager)
+        self._sub_tab.update_requested.connect(self._on_update_sub)
+        self._sub_tab.add_requested.connect(self._on_add_sub)
+        self._tabs.addTab(self._sub_tab, "  Subscriptions  ")
 
         self._settings_tab = SettingsTab(self.settings_mgr)
         self._settings_tab.settings_changed.connect(self._on_settings_changed)

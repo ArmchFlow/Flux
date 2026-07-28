@@ -33,6 +33,7 @@ class DualManager:
         if sys.platform != "win32":
             return
         try:
+            flags = subprocess.CREATE_NO_WINDOW
             r = subprocess.run(
                 ["powershell", "-NoProfile", "-Command",
                  "$adapters = Get-NetAdapter -ErrorAction SilentlyContinue "
@@ -48,6 +49,7 @@ class DualManager:
                  "-ErrorAction SilentlyContinue "
                  "} } else { Write-Output 'no stale adapters' }"],
                 capture_output=True, timeout=15, text=True,
+                creationflags=flags,
             )
             for line in r.stdout.splitlines():
                 logger.info("TUN cleanup: %s", line.strip())

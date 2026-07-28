@@ -23,6 +23,7 @@ class ServersTab(QWidget):
         self._servers: list[ProxyServer] = []
         self._delays: dict[str, int] = {}
         self._connected = False
+        self._ping_sort_asc = True
         self._setup_ui()
 
     def _setup_ui(self):
@@ -113,6 +114,7 @@ class ServersTab(QWidget):
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        header.sectionClicked.connect(self._on_header_clicked)
 
         self.table.doubleClicked.connect(self._on_connect)
 
@@ -221,3 +223,14 @@ class ServersTab(QWidget):
         else:
             filtered = [s for s in self._servers if s.protocol == protocol.lower()]
             self._render_table(filtered, self.search_input.text())
+
+    def _on_header_clicked(self, col: int):
+        if col != 4:
+            return
+        self._ping_sort_asc = not self._ping_sort_asc
+        srv = sorted(
+            self._servers,
+            key=lambda s: self._delays.get(s.tag, 99999),
+            reverse=not self._ping_sort_asc,
+        )
+        self._render_table(srv, self.search_input.text())
