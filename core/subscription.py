@@ -160,7 +160,17 @@ class SubscriptionManager:
         if not srv:
             return None
         srv.subscription_tag = "Amnezia"
+        url = "amnezia://imported"
+        sub = next((s for s in self.subscriptions if s.url == url), None)
+        if not sub:
+            sub = Subscription(url=url, name="AmneziaWG")
+            self.subscriptions.append(sub)
+        existing = self._servers_cache.get(url, [])
+        existing = [s for s in existing if s.server != srv.server or s.port != srv.port]
+        existing.append(srv)
+        self._servers_cache[url] = existing
         self._all_servers_cache = None
+        self._save()
         logger.info("Imported AWG config: %s (%s:%d)", srv.name, srv.server, srv.port)
         return srv
 

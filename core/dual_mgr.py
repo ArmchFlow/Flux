@@ -28,6 +28,11 @@ class DualManager:
     def is_running(self) -> bool:
         if self._amnezia_mgr and self._amnezia_mgr.is_connected:
             return True
+        if self._sb_proc and self._sb_proc.poll() is None:
+            return True
+        if self._xray_proc and self._xray_proc.poll() is None:
+            return True
+        return False
 
     def _cleanup_tun(self):
         if sys.platform != "win32":
@@ -38,7 +43,8 @@ class DualManager:
                 ["powershell", "-NoProfile", "-Command",
                  "$adapters = Get-NetAdapter -ErrorAction SilentlyContinue "
                  "| Where-Object { $_.Name -like '*singbox*' -or "
-                 "$_.Name -like '*myvpn*' -or $_.Name -like '*wintun*' }; "
+                 "$_.Name -like '*myvpn*' -or $_.Name -like '*wintun*' "
+                 "-or $_.Name -like '*MyAmnezia*' -or $_.Name -like '*Amnezia*' }; "
                  "if ($adapters) { "
                  "$adapters | ForEach-Object { "
                  "Write-Output \\\"DEL adapter $($_.Name)\\\"; "
@@ -118,6 +124,8 @@ class DualManager:
         logger.info("=== STARTING AMNEZIA WG ===")
         if self.is_running:
             self.stop()
+        AmneziaManager.kill_stale_service()
+        self._cleanup_tun()
         self._amnezia_config = config_path
         ok, msg = self._amnezia_mgr.connect(config_path)
         if ok:
@@ -129,6 +137,7 @@ class DualManager:
         logger.info("Stopping...")
         if self._amnezia_mgr and self._amnezia_mgr.is_connected:
             self._amnezia_mgr.disconnect()
+            AmneziaManager.kill_stale_service()
         for proc in [self._xray_proc, self._sb_proc]:
             if proc:
                 try:

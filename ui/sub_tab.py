@@ -40,19 +40,25 @@ class SubscriptionTab(QWidget):
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText(tr("url_placeholder"))
         self.url_input.setMinimumHeight(36)
-        add_layout.addWidget(self.url_input, 3)
+        self.url_input.setMinimumWidth(200)
+        add_layout.addWidget(self.url_input, 1)
 
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText(tr("name_placeholder"))
         self.name_input.setMinimumHeight(36)
-        self.name_input.setMaximumWidth(180)
-        add_layout.addWidget(self.name_input, 1)
+        self.name_input.setMaximumWidth(140)
+        add_layout.addWidget(self.name_input)
 
         add_btn = QPushButton(tr("add_subscription"))
         add_btn.setObjectName("successBtn")
         add_btn.setMinimumHeight(36)
         add_btn.clicked.connect(self._on_add)
         add_layout.addWidget(add_btn)
+
+        import_btn = QPushButton(tr("import_awg"))
+        import_btn.setMinimumHeight(36)
+        import_btn.clicked.connect(self._on_import_conf)
+        add_layout.addWidget(import_btn)
 
         layout.addLayout(add_layout)
 
@@ -66,14 +72,7 @@ class SubscriptionTab(QWidget):
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
-        imp_layout = QHBoxLayout()
-        imp_layout.setSpacing(8)
-        import_btn = QPushButton("Import .conf")
-        import_btn.setMinimumHeight(32)
-        import_btn.clicked.connect(self._on_import_conf)
-        imp_layout.addWidget(import_btn)
-        imp_layout.addStretch()
-        layout.addLayout(imp_layout)
+        self.table = QTableWidget()
 
         self.table = QTableWidget()
         self.table.setColumnCount(5)

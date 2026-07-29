@@ -1,8 +1,17 @@
 import ctypes
 import logging
+import sys
+import subprocess
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+_ERR_MSGS = {
+    1: "tunnel_service.exe or tunnel.dll not found in AmneziaLib directory",
+    2: "failed to write config to C:\\ProgramData\\MyAmnezia",
+    3: "failed to install Windows service (run as admin)",
+    4: "service started but tunnel failed (check C:\\ProgramData\\MyAmnezia\\*.log)",
+}
 
 
 class AmneziaStatus(ctypes.Structure):
@@ -30,14 +39,10 @@ class AmneziaManager:
     def connect(self, config_path: str) -> tuple[bool, str]:
         code = self._lib.amnezia_connect(config_path)
         if code == 0:
-            logger.info("Amnezia connected")
+            logger.info("Amnezia connected OK")
             return True, ""
-        msgs = {1: "tunnel_service.exe or tunnel.dll not found",
-                2: "failed to write config",
-                3: "failed to install Windows service",
-                4: "service started but crashed (check logs)"}
-        msg = msgs.get(code, f"unknown error code {code}")
-        logger.error("Amnezia connect failed: %s", msg)
+        msg = _ERR_MSGS.get(code, f"unknown error code {code}")
+        logger.error("Amnezia connect failed (code %d): %s", code, msg)
         return False, msg
 
     def disconnect(self) -> bool:
@@ -56,6 +61,20 @@ class AmneziaManager:
     @property
     def is_connected(self) -> bool:
         st = self.get_status()
-        if st and st.serviceState == 4:
-            return True
-        return False
+        return st is not None and st.serviceState == 4
+
+    @staticmethod
+    def kill_stale_service():
+        if sys.platform != "win32":
+            return
+        try:
+            subprocess.run(
+                ["sc.exe", "stop", "AmneziaWGTunnel$MyAmnezia"],
+                capture_output=True, timeout=5,
+            )
+            subprocess.run(
+                ["sc.exe", "delete", "AmneziaWGTunnel$MyAmnezia"],
+                capture_output=True, timeout=5,
+            )
+        except Exception:
+            pass

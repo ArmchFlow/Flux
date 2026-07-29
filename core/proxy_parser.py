@@ -452,11 +452,13 @@ def _parse_clash_yaml(data: str) -> list[ProxyServer]:
 
 
 def _detect_awg_version(raw: str) -> str:
-    if "HeaderProtectionKey" in raw:
+    if "HeaderProtectionKey" in raw and "ContentPaddingAddition" in raw:
         return "3.0"
-    if "S3" in raw and "S4" in raw:
+    if "S3" in raw or "S4" in raw:
         return "2.0"
-    return "1.5"
+    if "Jc" in raw or "Jmin" in raw or "I1" in raw:
+        return "1.5"
+    return "1.0"
 
 
 def parse_awg_conf(filepath: str) -> Optional[ProxyServer]:
