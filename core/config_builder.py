@@ -226,6 +226,88 @@ def build_xray_tun_config(*args, **kwargs):
     return {}
 
 
+def build_singbox_wireguard_config(
+    settings: AppSettings, srv: ProxyServer,
+) -> dict:
+    addr = ""
+    dns = ""
+    for line in srv.awg_raw.splitlines():
+        s = line.strip().lower()
+        if s.startswith("address") and "=" in s:
+            addr = s.split("=", 1)[1].strip().split(",")[0].strip()
+        if s.startswith("dns") and "=" in s:
+            dns = s.split("=", 1)[1].strip().split(",")[0].strip()
+
+    allowed = ["0.0.0.0/0", "::/0"]
+    for line in srv.awg_raw.splitlines():
+        s = line.strip().lower()
+        if s.startswith("allowedips") and "=" in s:
+            ips = s.split("=", 1)[1].strip()
+            allowed = [x.strip() for x in ips.split(",") if x.strip()]
+
+    dns_type, dns_host = _parse_dns_url(dns or "https://1.1.1.1/dns-query")
+    dns_remote = {"tag": "dns-remote", "type": dns_type, "server": dns_host}
+    if not _is_ip(dns_host):
+        dns_remote["domain_resolver"] = "dns-direct"
+
+    local_addr = [addr] if addr else ["172.16.0.2/32"]
+
+    return {
+        "log": {"level": "debug"},
+        "dns": {
+            "servers": [
+                dns_remote,
+                {"tag": "dns-direct", "type": "udp", "server": "8.8.8.8"},
+            ],
+            "final": "dns-remote",
+            "strategy": "ipv4_only",
+        },
+        "inbounds": [{
+            "type": "tun",
+            "tag": "tun-in",
+            "interface_name": "",
+            "address": [settings.tun.address],
+            "mtu": settings.tun.mtu,
+            "auto_route": settings.tun.auto_route,
+            "strict_route": settings.tun.strict_route,
+            "stack": settings.tun.stack,
+        }],
+        "outbounds": [
+            {"type": "direct", "tag": "direct"},
+            {"type": "direct", "tag": "proxy", "detour": "wg-ep"},
+        ],
+        "endpoints": [{
+            "type": "wireguard",
+            "tag": "wg-ep",
+            "address": local_addr,
+            "private_key": srv.password,
+            "peers": [{
+                "address": srv.server,
+                "port": srv.port,
+                "public_key": srv.public_key,
+                "allowed_ips": allowed,
+            }],
+            "mtu": 1400,
+            "system": False,
+        }],
+        "route": {
+            "auto_detect_interface": True,
+            "default_domain_resolver": "dns-remote",
+            "rules": [
+                {"action": "sniff"},
+                {
+                    "type": "logical", "mode": "or",
+                    "action": "hijack-dns",
+                    "rules": [{"port": [53]}, {"protocol": ["dns"]}],
+                },
+                {"ip_is_private": True, "outbound": "direct"},
+                {"inbound": "tun-in", "outbound": "proxy"},
+            ],
+            "final": "direct",
+        },
+    }
+
+
 def save_config_to_file(config: dict, path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")

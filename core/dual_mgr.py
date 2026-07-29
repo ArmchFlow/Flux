@@ -62,8 +62,8 @@ class DualManager:
         except Exception as e:
             logger.debug("TUN cleanup: %s", e)
 
-    def start(
-        self, xray_cfg: dict, settings,
+    def start(self,
+        xray_cfg: dict, settings,
     ) -> tuple[bool, str]:
         if self.is_running:
             self.stop()

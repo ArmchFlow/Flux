@@ -278,27 +278,25 @@ class MainWindow(QMainWindow):
         threading.Thread(target=_work, daemon=True).start()
 
     def _start_awg(self, srv):
-        raw = srv.awg_raw
-
-        # Parse the tunnel IP from Address for routing
+        # Parse tunnel IP from Address for routing fix
         addr = ""
-        for line in raw.splitlines():
+        for line in srv.awg_raw.splitlines():
             s = line.strip().lower()
             if s.startswith("address") and "=" in s:
                 addr = s.split("=", 1)[1].strip().split(",")[0].strip()
         tun_ip = addr.split("/")[0] if addr else ""
 
+        import subprocess as sp
         conf_path = self.data_dir / f"awg_{srv.tag}.conf"
-        # Write as UTF-8 with BOM so Windows wifstream handles it
-        conf_path.write_bytes(raw.encode("utf-8-sig"))
+        conf_path.write_bytes(srv.awg_raw.encode("utf-8"))
         self.xray_mgr.init_amnezia(self.xray_mgr.sb_path.parent)
 
         ok, msg = self.xray_mgr.start_amnezia(str(conf_path))
         if ok:
-            import subprocess as sp
+            # Add default route through WireGuard TUN adapter
             if tun_ip:
-                sp.run(["route", "add", "0.0.0.0", "mask", "0.0.0.0", tun_ip, "metric", "1"],
-                       capture_output=True, timeout=5)
+                sp.run(["route", "add", "0.0.0.0", "mask", "0.0.0.0",
+                       tun_ip, "metric", "1"], capture_output=True, timeout=5)
             self.set_connected(True)
             self._status_text.setText(" " + tr("connected_tun") + f" (AWG)")
             logger.info("=== CONNECTED (AWG) ===")
