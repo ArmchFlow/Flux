@@ -1,11 +1,12 @@
 import logging
 import sys
+import threading
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QTabWidget,
     QStatusBar, QLabel, QPushButton, QMessageBox,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 from PyQt6.QtGui import QCloseEvent, QIcon
 
 from .sub_tab import SubscriptionTab
@@ -25,6 +26,10 @@ from cryptography.fernet import Fernet
 logger = logging.getLogger(__name__)
 
 
+class _VpnSignals(QObject):
+    done = pyqtSignal(bool, str, int)
+
+
 class MainWindow(QMainWindow):
     def __init__(
         self,
@@ -42,6 +47,9 @@ class MainWindow(QMainWindow):
         self.data_dir = data_dir
         self._connected = False
         self._current_proxy_tag = "auto"
+        self._connecting = False
+        self._vpn_sig = _VpnSignals()
+        self._vpn_sig.done.connect(self._on_connect_done)
 
         logger.info("Initializing MainWindow...")
         self.setWindowTitle("Flux")
@@ -208,6 +216,10 @@ class MainWindow(QMainWindow):
 
     def _connect_vpn(self):
         logger.info("=== CONNECTING VPN ===")
+        if self._connecting:
+            logger.info("Already connecting, skipping")
+            return
+        self._connecting = True
         self._status_text.setText(" " + tr("connecting"))
 
         servers = self.sub_manager.get_all_servers()
@@ -217,6 +229,7 @@ class MainWindow(QMainWindow):
             logger.warning("No servers available for connection")
             QMessageBox.warning(self, tr("no_servers_title"), tr("no_servers"))
             self._status_text.setText(" " + tr("no_servers_title"))
+            self._connecting = False
             return
 
         logger.info("Building configs for %d servers (selected=%s)...",
@@ -234,23 +247,31 @@ class MainWindow(QMainWindow):
             logger.error("Config build failed: %s", e, exc_info=True)
             QMessageBox.critical(self, tr("config_error"), str(e))
             self._status_text.setText(" " + tr("config_error"))
+            self._connecting = False
             return
 
-        success, mode = self.xray_mgr.start(
-            xray_cfg, self.settings_mgr.settings)
+        def _work():
+            success, mode = self.xray_mgr.start(xray_cfg, self.settings_mgr.settings)
+            self._vpn_sig.done.emit(success, mode, len(servers))
 
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _on_connect_done(self, success: bool, mode: str, count: int):
+        if not self._connecting:
+            return
+        self._connecting = False
         if success:
             self.set_connected(True)
-            self._status_text.setText(" " + tr("connected_tun") + f" ({len(servers)} " + tr("servers_count").lower() + ")")
+            self._status_text.setText(" " + tr("connected_tun") + f" ({count} " + tr("servers_count").lower() + ")")
             logger.info("=== CONNECTED (%s) ===", mode)
         else:
             logger.error("=== CONNECTION FAILED ===")
-            QMessageBox.critical(self, tr("connection_failed"),
-                                mode or "Could not start.")
+            QMessageBox.critical(self, tr("connection_failed"), mode or "Could not start.")
             self._status_text.setText(" " + tr("connection_failed"))
 
     def _disconnect_vpn(self):
         logger.info("=== DISCONNECTING ===")
+        self._connecting = False
         self.xray_mgr.stop()
         self.set_connected(False)
         self._status_text.setText(" " + tr("disconnected"))
