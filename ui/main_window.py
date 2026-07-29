@@ -1,6 +1,4 @@
 import logging
-import sys
-from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QTabWidget,
     QStatusBar, QLabel, QPushButton, QMessageBox,
@@ -20,6 +18,7 @@ from core.settings_manager import SettingsManager
 from core.dual_mgr import DualManager
 from core.config_builder import build_xray_proxy_config
 from core.translations import tr
+from main import find_icon
 from cryptography.fernet import Fernet
 
 logger = logging.getLogger(__name__)
@@ -45,14 +44,9 @@ class MainWindow(QMainWindow):
 
         logger.info("Initializing MainWindow...")
         self.setWindowTitle("Flux")
-        try:
-            base = Path(sys._MEIPASS)
-        except AttributeError:
-            base = Path(__file__).parent.parent
-        for ico in [base / "bin" / "flux.ico", base / "Flux detail.png"]:
-            if ico.exists():
-                self.setWindowIcon(QIcon(str(ico.resolve())))
-                break
+        icon_path = find_icon("flux.ico")
+        if icon_path:
+            self.setWindowIcon(QIcon(icon_path))
         self.setMinimumSize(640, 480)
         self.resize(960, 680)
         self.setStyleSheet(DARK_STYLE)

@@ -36,6 +36,18 @@ def find_binary(name: str) -> Path:
     return Path(system_bin) if system_bin else bundled
 
 
+def find_icon(name: str) -> str:
+    try:
+        base = Path(sys._MEIPASS)
+    except AttributeError:
+        base = Path(__file__).parent
+    for path in [base / "bin" / name, base / name, base / "Flux detail.png"]:
+        p = path.resolve()
+        if p.exists():
+            return str(p)
+    return ""
+
+
 def main():
     if sys.platform == "win32":
         import ctypes
@@ -67,14 +79,10 @@ def main():
     app.setOrganizationName("Flux")
     app.setQuitOnLastWindowClosed(False)
 
-    try:
-        base = Path(sys._MEIPASS)
-    except AttributeError:
-        base = Path(__file__).parent
-    for ico in [base / "bin" / "flux.ico", base / "Flux detail.png"]:
-        if ico.exists():
-            app.setWindowIcon(QIcon(str(ico.resolve())))
-            break
+    icon_path = find_icon("flux.ico")
+    if icon_path:
+        app_icon = QIcon(icon_path)
+        app.setWindowIcon(app_icon)
 
     vault = get_or_create_vault()
     settings_mgr = SettingsManager(data_dir)
