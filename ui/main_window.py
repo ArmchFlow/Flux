@@ -310,7 +310,7 @@ class MainWindow(QMainWindow):
 
     def _show_from_tray(self):
         logger.debug("Restoring window from tray")
-        self.show()
+        self.showNormal()
         self.raise_()
         self.activateWindow()
 

@@ -1,24 +1,6 @@
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtGui import QIcon, QAction
-import sys
-from pathlib import Path
-
-
-def _tray_icon_path() -> str:
-    try:
-        base = Path(sys._MEIPASS)
-    except AttributeError:
-        base = Path(__file__).parent.parent
-    candidates = [
-        base / "bin" / "flux_tray.png",
-        base / "bin" / "flux.ico",
-        base / "Flux detail.png",
-    ]
-    for p in candidates:
-        if p.exists():
-            return str(p.resolve())
-    return str(candidates[0])
+from PyQt6.QtCore import pyqtSignal, QSize
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QAction
 
 
 class SystemTray(QSystemTrayIcon):
@@ -33,8 +15,7 @@ class SystemTray(QSystemTrayIcon):
         self._setup()
 
     def _setup(self):
-        path = _tray_icon_path()
-        self.setIcon(QIcon(path))
+        self.setIcon(self._make_icon(False))
         self.setToolTip("Flux")
 
         self._menu = QMenu()
@@ -65,6 +46,7 @@ class SystemTray(QSystemTrayIcon):
 
     def set_connected(self, connected: bool):
         self._connected = connected
+        self.setIcon(self._make_icon(connected))
 
         if connected:
             self._status_action.setText("Status: Connected")
@@ -93,3 +75,19 @@ class SystemTray(QSystemTrayIcon):
         if reason in (QSystemTrayIcon.ActivationReason.Trigger,
                       QSystemTrayIcon.ActivationReason.DoubleClick):
             self.show_window_requested.emit()
+
+    def _make_icon(self, connected: bool) -> QIcon:
+        size = 64
+        p = QPixmap(QSize(size, size))
+        p.fill(QColor(0, 0, 0, 0))
+        painter = QPainter(p)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if connected:
+            painter.setBrush(QBrush(QColor("#a6e3a1")))
+            painter.setPen(QColor("#1e1e2e"))
+        else:
+            painter.setBrush(QBrush(QColor("#585b70")))
+            painter.setPen(QColor("#cdd6f4"))
+        painter.drawEllipse(8, 8, size - 16, size - 16)
+        painter.end()
+        return QIcon(p)
