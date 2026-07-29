@@ -153,8 +153,9 @@ class SubscriptionTab(QWidget):
 
     def _on_update_all(self):
         count = len(self.sub_manager.subscriptions)
-        logger.info("UI: Update all %d subscriptions", count)
         for sub in self.sub_manager.subscriptions:
+            if sub.url == "amnezia://imported":
+                continue
             self.update_requested.emit(sub.url)
 
     def refresh_after_update(self):

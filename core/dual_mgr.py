@@ -169,10 +169,11 @@ class DualManager:
     def tcp_ping_servers(servers, timeout: float = 2.0) -> dict:
         import concurrent.futures
         results = {}
+        to_ping = [s for s in servers if s.protocol != "awg"]
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
             futures = {
                 ex.submit(DualManager.tcp_ping, s.server, s.port, timeout): s.tag
-                for s in servers
+                for s in to_ping
             }
             for f in concurrent.futures.as_completed(futures):
                 tag = futures[f]
@@ -180,4 +181,7 @@ class DualManager:
                     results[tag] = f.result()
                 except Exception:
                     results[tag] = -1
+        for s in servers:
+            if s.tag not in results:
+                results[s.tag] = -1
         return results

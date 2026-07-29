@@ -491,6 +491,6 @@ def parse_awg_conf(filepath: str) -> Optional[ProxyServer]:
         s.ws_path = addr_m.group(1).strip()
 
     ver = _detect_awg_version(raw)
-    s.encryption = f"AWG{ver}"
+    s.encryption = f"AWG {ver}"
 
     return s
