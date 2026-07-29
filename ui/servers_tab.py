@@ -30,6 +30,7 @@ class ServersTab(QWidget):
         super().__init__(parent)
         self.sub_manager = sub_manager
         self._servers: list[ProxyServer] = []
+        self._rows: list[ProxyServer] = []
         self._delays: dict[str, int] = {}
         self._connected = False
         self._ping_sort_asc = True
@@ -105,7 +106,7 @@ class ServersTab(QWidget):
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.table.setColumnWidth(3, 110)
         header.sectionClicked.connect(self._on_header_clicked)
-        self.table.doubleClicked.connect(self._on_connect)
+        self.table.doubleClicked.connect(self._on_double_click)
 
         vbox.addWidget(self.table, 1)
 
@@ -115,6 +116,7 @@ class ServersTab(QWidget):
 
     def _render_table(self, servers: list[ProxyServer], filter_text: str = ""):
         self.table.setRowCount(0)
+        self._rows = []
         for srv in servers:
             if self._filter_proto and srv.protocol.lower() != self._filter_proto:
                 continue
@@ -126,6 +128,7 @@ class ServersTab(QWidget):
                     continue
             row = self.table.rowCount()
             self.table.insertRow(row)
+            self._rows.append(srv)
             item = QTableWidgetItem(srv.display_name)
             item.setData(Qt.ItemDataRole.UserRole, srv.tag)
             self.table.setItem(row, _COL_NAME, item)
@@ -161,12 +164,20 @@ class ServersTab(QWidget):
         r = {idx.row() for idx in self.table.selectedIndexes()}
         if not r:
             return None
-        item = self.table.item(r.pop(), _COL_NAME)
-        return item.data(Qt.ItemDataRole.UserRole) if item else None
+        row = r.pop()
+        if row < len(self._rows):
+            return self._rows[row].tag
+        return None
 
     def _on_connect(self):
         tag = self._selected_tag()
         if tag:
+            self.connect_requested.emit(tag)
+
+    def _on_double_click(self, index):
+        row = index.row()
+        if row < len(self._rows):
+            tag = self._rows[row].tag
             self.connect_requested.emit(tag)
 
     def _on_disconnect(self):
