@@ -41,7 +41,7 @@ def find_icon(name: str) -> str:
         base = Path(sys._MEIPASS)
     except AttributeError:
         base = Path(__file__).parent
-    for path in [base / "bin" / name, base / name, base / "Flux detail.png"]:
+    for path in [base / "bin" / name, base / name, base / "Flux mini.png"]:
         p = path.resolve()
         if p.exists():
             return str(p)

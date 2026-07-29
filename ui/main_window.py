@@ -49,7 +49,7 @@ class MainWindow(QMainWindow):
             _base = Path(sys._MEIPASS)
         except AttributeError:
             _base = Path(__file__).parent.parent
-        for _p in [_base / "bin" / "flux.ico", _base / "Flux detail.png"]:
+        for _p in [_base / "bin" / "flux.ico", _base / "Flux mini.png"]:
             if _p.exists():
                 self.setWindowIcon(QIcon(str(_p.resolve())))
                 break
