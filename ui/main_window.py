@@ -1,10 +1,10 @@
 import logging
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
-    QStatusBar, QLabel, QPushButton, QMessageBox, QSystemTrayIcon,
+    QMainWindow, QWidget, QVBoxLayout, QTabWidget,
+    QStatusBar, QLabel, QPushButton, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QCloseEvent, QKeyEvent
+from PyQt6.QtGui import QCloseEvent
 
 from .sub_tab import SubscriptionTab
 from .servers_tab import ServersTab
@@ -17,6 +17,7 @@ from core.subscription import SubscriptionManager
 from core.settings_manager import SettingsManager
 from core.dual_mgr import DualManager
 from core.config_builder import build_xray_proxy_config
+from core.translations import tr
 from cryptography.fernet import Fernet
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ class MainWindow(QMainWindow):
 
         logger.info("Initializing MainWindow...")
         self.setWindowTitle("MyVPN")
-        self.setMinimumSize(860, 600)
+        self.setMinimumSize(640, 480)
         self.resize(960, 680)
         self.setStyleSheet(DARK_STYLE)
 
@@ -74,6 +75,15 @@ class MainWindow(QMainWindow):
             self.hide()
             logger.info("Starting minimized (hidden)")
 
+        self._tray.show()
+
+    def changeEvent(self, event):
+        if event.type() == event.Type.WindowStateChange and self.windowState() & Qt.WindowState.WindowMinimized:
+            event.ignore()
+            self.hide()
+            return
+        super().changeEvent(event)
+
     def _setup_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
@@ -88,19 +98,19 @@ class MainWindow(QMainWindow):
         self._servers_tab.connect_requested.connect(self._on_server_selected)
         self._servers_tab.disconnect_requested.connect(self._on_disconnect)
         self._servers_tab.ping_requested.connect(self._on_ping_servers)
-        self._tabs.addTab(self._servers_tab, "  Servers  ")
+        self._tabs.addTab(self._servers_tab, tr("tab_servers"))
 
         self._sub_tab = SubscriptionTab(self.sub_manager)
         self._sub_tab.update_requested.connect(self._on_update_sub)
         self._sub_tab.add_requested.connect(self._on_add_sub)
-        self._tabs.addTab(self._sub_tab, "  Subscriptions  ")
+        self._tabs.addTab(self._sub_tab, tr("tab_subscriptions"))
 
         self._settings_tab = SettingsTab(self.settings_mgr)
         self._settings_tab.settings_changed.connect(self._on_settings_changed)
-        self._tabs.addTab(self._settings_tab, "  Settings  ")
+        self._tabs.addTab(self._settings_tab, tr("tab_settings"))
 
         self._log_tab = LogTab()
-        self._tabs.addTab(self._log_tab, "  Logs  ")
+        self._tabs.addTab(self._log_tab, tr("tab_logs"))
 
         layout.addWidget(self._tabs)
         logger.debug("UI tabs set up: Subscriptions, Servers, Settings, Logs")
@@ -116,7 +126,7 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        self._status_text = QLabel(" Ready")
+        self._status_text = QLabel(" " + tr("ready"))
         status.addWidget(self._status_text)
 
         self._traffic_label = QLabel("")
@@ -137,10 +147,10 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error("Subscription update failed: %s", e, exc_info=True)
             QMessageBox.critical(
-                self, "Update Error",
-                f"Failed to update subscription:\n{e}",
+                self, tr("update_error"),
+                f"{tr('update_err_msg')}:\n{e}",
             )
-            self._status_text.setText(" Update failed")
+            self._status_text.setText(" " + tr("update_failed"))
 
     def _on_add_sub(self, url: str, name: str):
         logger.info("UI: add subscription requested: url=%s, name=%s", url[:80], name or "(auto)")
@@ -155,8 +165,8 @@ class MainWindow(QMainWindow):
             logger.error("Failed to add subscription: %s", e, exc_info=True)
             self._status_text.setText(" Fetch failed")
             QMessageBox.critical(
-                self, "Error",
-                f"Could not fetch subscription. Check the URL and your internet connection.\n\n{e}",
+                self, tr("error"),
+                f"{tr('fetch_err_msg')}\n\n{e}",
             )
 
     def _on_server_selected(self, tag: str):
@@ -188,32 +198,32 @@ class MainWindow(QMainWindow):
 
     def _connect_vpn(self):
         logger.info("=== CONNECTING VPN ===")
-        self._status_text.setText(" Connecting...")
+        self._status_text.setText(" " + tr("connecting"))
 
         servers = self.sub_manager.get_all_servers()
         logger.info("Servers available for connection: %d", len(servers))
 
         if not servers:
             logger.warning("No servers available for connection")
-            QMessageBox.warning(
-                self, "No Servers",
-                "No servers available. Please add and update a subscription first.",
-            )
-            self._status_text.setText(" No servers")
+            QMessageBox.warning(self, tr("no_servers_title"), tr("no_servers"))
+            self._status_text.setText(" " + tr("no_servers_title"))
             return
 
         logger.info("Building configs for %d servers (selected=%s)...",
                    len(servers), self._current_proxy_tag)
         try:
-            selected_tag = (
-                self._current_proxy_tag if self._current_proxy_tag != "auto"
-                else servers[0].tag
-            )
+            if self.settings_mgr.settings.proxy.auto_select:
+                selected_tag = servers[0].tag
+            else:
+                selected_tag = (
+                    self._current_proxy_tag if self._current_proxy_tag != "auto"
+                    else servers[0].tag
+                )
             xray_cfg = build_xray_proxy_config(servers, selected_tag)
         except Exception as e:
             logger.error("Config build failed: %s", e, exc_info=True)
-            QMessageBox.critical(self, "Config Error", str(e))
-            self._status_text.setText(" Config error")
+            QMessageBox.critical(self, tr("config_error"), str(e))
+            self._status_text.setText(" " + tr("config_error"))
             return
 
         success, mode = self.xray_mgr.start(
@@ -221,19 +231,19 @@ class MainWindow(QMainWindow):
 
         if success:
             self.set_connected(True)
-            self._status_text.setText(f" Connected (TUN, {len(servers)} servers)")
+            self._status_text.setText(f" " + tr("connected_tun") + f" ({len(servers)} " + tr("servers_count").lower() + ")")
             logger.info("=== CONNECTED (%s) ===", mode)
         else:
             logger.error("=== CONNECTION FAILED ===")
-            QMessageBox.critical(self, "Connection Failed",
+            QMessageBox.critical(self, tr("connection_failed"),
                                 mode or "Could not start.")
-            self._status_text.setText(" Connection failed")
+            self._status_text.setText(" " + tr("connection_failed"))
 
     def _disconnect_vpn(self):
         logger.info("=== DISCONNECTING ===")
         self.xray_mgr.stop()
         self.set_connected(False)
-        self._status_text.setText(" Disconnected")
+        self._status_text.setText(" " + tr("disconnected"))
 
     def set_connected(self, connected: bool):
         logger.debug("Connection state change: %s -> %s", self._connected, connected)
@@ -329,26 +339,9 @@ class MainWindow(QMainWindow):
     def _quit_app(self):
         self._force_exit()
 
-    def keyPressEvent(self, event):
-        if event.modifiers() == Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_Q:
-            logger.info("Ctrl+Q pressed — force exit")
-            self._force_exit()
-        super().keyPressEvent(event)
-
     def closeEvent(self, event: QCloseEvent):
-        if self.settings_mgr.settings.minimize_to_tray and self._tray.isVisible():
-            logger.debug("Closing window → minimize to tray")
-            event.ignore()
-            self.hide()
-            self._tray.showMessage(
-                "MyVPN",
-                "Application minimized to tray. Right-click the tray icon to restore or quit.",
-                QSystemTrayIcon.MessageIcon.Information,
-                2000,
-            )
-        else:
-            logger.info("Closing application")
-            event.accept()
+        event.ignore()
+        self._force_exit()
 
 
 def _format_bytes(n: int) -> str:

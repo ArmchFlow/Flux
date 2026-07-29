@@ -29,7 +29,8 @@ class LogTab(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(8)
 
-        title = QLabel("Application Logs")
+        from core.translations import tr
+        title = QLabel(tr("log_window"))
         title.setObjectName("titleLabel")
         layout.addWidget(title)
 

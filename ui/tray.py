@@ -37,15 +37,9 @@ class SystemTray(QSystemTrayIcon):
 
         self._menu.addSeparator()
 
-        show_action = QAction("Open Window")
-        show_action.triggered.connect(self._on_show)
-        self._menu.addAction(show_action)
-
-        self._menu.addSeparator()
-
-        quit_action = QAction("✕  Exit")
-        quit_action.triggered.connect(self._on_quit)
-        self._menu.addAction(quit_action)
+        exit_action = QAction("Exit")
+        exit_action.triggered.connect(self._on_quit)
+        self._menu.addAction(exit_action)
 
         self.setContextMenu(self._menu)
         self.activated.connect(self._on_activated)
@@ -78,7 +72,8 @@ class SystemTray(QSystemTrayIcon):
         self.quit_requested.emit()
 
     def _on_activated(self, reason):
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger,
+                      QSystemTrayIcon.ActivationReason.DoubleClick):
             self.show_window_requested.emit()
 
     def _make_icon(self, connected: bool) -> QIcon:

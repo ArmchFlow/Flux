@@ -2,11 +2,13 @@ import logging
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLineEdit, QTableWidget, QTableWidgetItem, QHeaderView,
-    QLabel, QMessageBox,
+    QLabel, QMessageBox, QMenu,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QAction
 
 from core.subscription import SubscriptionManager, Subscription
+from core.translations import tr
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ class SubscriptionTab(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        title = QLabel("Subscription Management")
+        title = QLabel(tr("subscription_mgmt"))
         title.setObjectName("titleLabel")
         layout.addWidget(title)
 
@@ -34,17 +36,17 @@ class SubscriptionTab(QWidget):
         add_layout.setSpacing(8)
 
         self.url_input = QLineEdit()
-        self.url_input.setPlaceholderText("Paste subscription URL here...")
+        self.url_input.setPlaceholderText(tr("url_placeholder"))
         self.url_input.setMinimumHeight(36)
         add_layout.addWidget(self.url_input, 3)
 
         self.name_input = QLineEdit()
-        self.name_input.setPlaceholderText("Name (optional)")
+        self.name_input.setPlaceholderText(tr("name_placeholder"))
         self.name_input.setMinimumHeight(36)
         self.name_input.setMaximumWidth(180)
         add_layout.addWidget(self.name_input, 1)
 
-        add_btn = QPushButton("Add Subscription")
+        add_btn = QPushButton(tr("add_subscription"))
         add_btn.setObjectName("successBtn")
         add_btn.setMinimumHeight(36)
         add_btn.clicked.connect(self._on_add)
@@ -55,24 +57,26 @@ class SubscriptionTab(QWidget):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
 
-        update_all_btn = QPushButton("Update All")
+        update_all_btn = QPushButton(tr("update_all"))
         update_all_btn.clicked.connect(self._on_update_all)
         btn_layout.addWidget(update_all_btn)
-
-        update_selected_btn = QPushButton("Update Selected")
-        update_selected_btn.clicked.connect(self._on_update_selected)
-        btn_layout.addWidget(update_selected_btn)
-
-        remove_btn = QPushButton("Remove Selected")
-        remove_btn.setObjectName("dangerBtn")
-        remove_btn.clicked.connect(self._on_remove)
-        btn_layout.addWidget(remove_btn)
 
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
         self.table = QTableWidget()
         self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels([
+            tr("name"), tr("url"), tr("last_updated"),
+            tr("servers_count"), tr("status")
+        ])
+        self.table.setAlternatingRowColors(True)
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.table.setShowGrid(False)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._on_context_menu)
         self.table.setHorizontalHeaderLabels([
             "Name", "URL", "Last Updated", "Servers", "Status"
         ])
@@ -109,19 +113,19 @@ class SubscriptionTab(QWidget):
                 dt = datetime.fromtimestamp(sub.last_updated)
                 updated = dt.strftime("%Y-%m-%d %H:%M")
             else:
-                updated = "Never"
+                updated = tr("never")
             self.table.setItem(row, 2, QTableWidgetItem(updated))
 
             servers = self.sub_manager.get_cached_servers(sub.url)
             self.table.setItem(row, 3, QTableWidgetItem(str(len(servers))))
 
-            status = "Active" if sub.enabled else "Disabled"
+            status = tr("active") if sub.enabled else tr("disabled")
             self.table.setItem(row, 4, QTableWidgetItem(status))
 
     def _on_add(self):
         url = self.url_input.text().strip()
         if not url:
-            QMessageBox.warning(self, "Error", "Please enter a subscription URL")
+            QMessageBox.warning(self, tr("error"), tr("add_sub_error"))
             return
 
         name = self.name_input.text().strip()
@@ -137,40 +141,35 @@ class SubscriptionTab(QWidget):
             logger.error("Failed to add subscription via UI: %s", e, exc_info=True)
             QMessageBox.critical(self, "Error", f"Failed to add subscription:\n{e}")
 
-    def _on_update_selected(self):
-        rows = {idx.row() for idx in self.table.selectedIndexes()}
-        if not rows:
-            QMessageBox.information(self, "Info", "Select a subscription to update")
-            return
-
-        for row in rows:
-            url_item = self.table.item(row, 1)
-            if url_item:
-                url = url_item.text()
-                logger.info("UI: Update selected subscription: %s", url[:60])
-                self.update_requested.emit(url)
-
     def _on_update_all(self):
         count = len(self.sub_manager.subscriptions)
         logger.info("UI: Update all %d subscriptions", count)
         for sub in self.sub_manager.subscriptions:
             self.update_requested.emit(sub.url)
 
-    def _on_remove(self):
+    def refresh_after_update(self):
+        logger.debug("Refreshing subscription list UI")
+        self._load_data()
+
+    def _on_context_menu(self, pos):
         rows = {idx.row() for idx in self.table.selectedIndexes()}
         if not rows:
             return
+        row = rows.pop()
+        url_item = self.table.item(row, 1)
+        if not url_item:
+            return
+        url = url_item.text()
+        menu = QMenu(self)
+        update_act = QAction(tr("update"), self)
+        update_act.triggered.connect(lambda: self.update_requested.emit(url))
+        menu.addAction(update_act)
+        remove_act = QAction(tr("remove"), self)
+        remove_act.triggered.connect(lambda: self._remove_by_url(url))
+        menu.addAction(remove_act)
+        menu.exec(self.table.viewport().mapToGlobal(pos))
 
-        for row in rows:
-            url_item = self.table.item(row, 1)
-            if url_item:
-                url = url_item.text()
-                logger.info("UI: Removing subscription: %s", url[:60])
-                self.sub_manager.remove_subscription(url)
-
-        self._load_data()
-        logger.info("Removed %d subscription(s)", len(rows))
-
-    def refresh_after_update(self):
-        logger.debug("Refreshing subscription list UI")
+    def _remove_by_url(self, url: str):
+        logger.info("UI: Removing subscription: %s", url[:60])
+        self.sub_manager.remove_subscription(url)
         self._load_data()

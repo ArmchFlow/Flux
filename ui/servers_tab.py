@@ -2,14 +2,23 @@ import logging
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView,
-    QLabel, QComboBox, QLineEdit,
+    QLabel, QLineEdit, QMenu,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QAction
 
 from core.subscription import SubscriptionManager
 from core.proxy_parser import ProxyServer
+from core.translations import tr
 
 logger = logging.getLogger(__name__)
+
+_COL_NAME = 0
+_COL_PROTO = 1
+_COL_PING = 2
+_COL_SUB = 3
+
+_ALL_PROTOCOLS = ["vless", "vmess", "ss", "trojan", "hysteria2"]
 
 
 class ServersTab(QWidget):
@@ -24,142 +33,118 @@ class ServersTab(QWidget):
         self._delays: dict[str, int] = {}
         self._connected = False
         self._ping_sort_asc = True
+        self._filter_proto = ""
         self._setup_ui()
 
     def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        vbox = QVBoxLayout(self)
+        vbox.setContentsMargins(8, 8, 8, 8)
+        vbox.setSpacing(8)
 
-        top_layout = QHBoxLayout()
-        top_layout.setSpacing(8)
-
-        title = QLabel("Servers")
+        title = QLabel(tr("servers"))
         title.setObjectName("titleLabel")
-        top_layout.addWidget(title)
+        vbox.addWidget(title)
 
-        top_layout.addStretch()
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
 
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search servers...")
-        self.search_input.setMaximumWidth(250)
-        self.search_input.setMinimumHeight(30)
-        self.search_input.textChanged.connect(self._on_search)
-        top_layout.addWidget(self.search_input)
-
-        protocol_filter = QComboBox()
-        protocol_filter.addItem("All Protocols")
-        protocol_filter.addItems(["vless", "vmess", "ss", "trojan", "hysteria2"])
-        protocol_filter.currentTextChanged.connect(self._on_filter)
-        protocol_filter.setMaximumWidth(150)
-        protocol_filter.setMinimumHeight(30)
-        top_layout.addWidget(protocol_filter)
-
-        layout.addLayout(top_layout)
-
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(8)
-
-        self.connect_btn = QPushButton("Connect")
+        self.connect_btn = QPushButton(tr("connect"))
         self.connect_btn.setObjectName("connectBtn")
+        self.connect_btn.setMinimumHeight(30)
         self.connect_btn.clicked.connect(self._on_connect)
-        btn_layout.addWidget(self.connect_btn)
+        btn_row.addWidget(self.connect_btn)
 
-        self.disconnect_btn = QPushButton("Disconnect")
+        self.disconnect_btn = QPushButton(tr("disconnect"))
         self.disconnect_btn.setObjectName("disconnectBtn")
+        self.disconnect_btn.setMinimumHeight(30)
         self.disconnect_btn.clicked.connect(self._on_disconnect)
         self.disconnect_btn.hide()
-        btn_layout.addWidget(self.disconnect_btn)
+        btn_row.addWidget(self.disconnect_btn)
 
-        ping_selected_btn = QPushButton("Ping Selected")
-        ping_selected_btn.clicked.connect(self._on_ping_selected)
-        btn_layout.addWidget(ping_selected_btn)
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText(tr("search_servers"))
+        self.search_input.setMaximumWidth(150)
+        self.search_input.setMinimumHeight(30)
+        self.search_input.textChanged.connect(self._on_search)
+        filter_act = QAction("\u25be", self)
+        filter_act.triggered.connect(self._on_filter_menu)
+        self.search_input.addAction(filter_act, QLineEdit.ActionPosition.TrailingPosition)
+        btn_row.addWidget(self.search_input)
 
-        ping_all_btn = QPushButton("Ping All")
+        ping_all_btn = QPushButton(tr("ping_all"))
+        ping_all_btn.setMinimumHeight(30)
         ping_all_btn.clicked.connect(self._on_ping_all)
-        btn_layout.addWidget(ping_all_btn)
+        btn_row.addWidget(ping_all_btn)
 
-        self.auto_select_cb = QComboBox()
-        self.auto_select_cb.addItem("Auto Select (URLTest)")
-        self.auto_select_cb.addItem("Manual Select")
-        self.auto_select_cb.setMaximumWidth(200)
-        self.auto_select_cb.setMinimumHeight(30)
-        self.auto_select_cb.currentIndexChanged.connect(self._on_auto_select_changed)
-        btn_layout.addWidget(self.auto_select_cb)
-
-        btn_layout.addStretch()
-
-        self.status_label = QLabel("Disconnected")
-        self.status_label.setObjectName("statusDisconnected")
-        btn_layout.addWidget(self.status_label)
-
-        layout.addLayout(btn_layout)
+        btn_row.addStretch()
+        vbox.addLayout(btn_row)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(6)
+        self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels([
-            "Name", "Protocol", "Address", "Port", "Ping", "Subscription"
+            tr("name"), tr("protocol"), tr("ping"), tr("subscription")
         ])
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.setShowGrid(False)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(40)
+
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._on_context_menu)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         header = self.table.horizontalHeader()
-        header.setStretchLastSection(True)
+        header.setStretchLastSection(False)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+        header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.table.setColumnWidth(3, 110)
         header.sectionClicked.connect(self._on_header_clicked)
-
         self.table.doubleClicked.connect(self._on_connect)
 
-        layout.addWidget(self.table)
+        vbox.addWidget(self.table, 1)
 
     def load_servers(self):
         self._servers = self.sub_manager.get_all_servers()
-        logger.debug("ServersTab loading %d servers", len(self._servers))
         self._render_table(self._servers)
 
     def _render_table(self, servers: list[ProxyServer], filter_text: str = ""):
         self.table.setRowCount(0)
-
         for srv in servers:
+            if self._filter_proto and srv.protocol.lower() != self._filter_proto:
+                continue
             if filter_text:
-                text = filter_text.lower()
-                if (text not in srv.display_name.lower()
-                        and text not in srv.server.lower()
-                        and text not in srv.protocol.lower()):
+                t = filter_text.lower()
+                if (t not in srv.display_name.lower()
+                        and t not in srv.server.lower()
+                        and t not in srv.protocol.lower()):
                     continue
-
             row = self.table.rowCount()
             self.table.insertRow(row)
-
-            name_item = QTableWidgetItem(srv.display_name)
-            name_item.setData(Qt.ItemDataRole.UserRole, srv.tag)
-            self.table.setItem(row, 0, name_item)
-
-            self.table.setItem(row, 1, QTableWidgetItem(srv.protocol.upper()))
-            self.table.setItem(row, 2, QTableWidgetItem(srv.server))
-            self.table.setItem(row, 3, QTableWidgetItem(str(srv.port)))
-
-            delay = self._delays.get(srv.tag, -1)
-            if delay >= 0:
-                ping_text = f"{delay} ms"
-                if delay < 100:
-                    ping_text = f"★ {ping_text}"
+            item = QTableWidgetItem(srv.display_name)
+            item.setData(Qt.ItemDataRole.UserRole, srv.tag)
+            self.table.setItem(row, _COL_NAME, item)
+            pi = QTableWidgetItem(srv.protocol.upper())
+            pi.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table.setItem(row, _COL_PROTO, pi)
+            d = self._delays.get(srv.tag, -1)
+            if d >= 0:
+                ping_text = f"{d} " + tr("ping_ms")
+                if d < 100:
+                    ping_text = f"\u2605 {ping_text}"
             else:
-                ping_text = "—"
-            self.table.setItem(row, 4, QTableWidgetItem(ping_text))
-
-            self.table.setItem(row, 5, QTableWidgetItem(srv.subscription_tag))
+                ping_text = tr("dash")
+            self.table.setItem(row, _COL_PING, QTableWidgetItem(ping_text))
+            si = QTableWidgetItem(srv.subscription_tag)
+            si.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            self.table.setItem(row, _COL_SUB, si)
 
     def update_delays(self, delays: dict[str, int]):
-        logger.debug("Updating delays: %d results", len(delays))
         self._delays.update(delays)
         self._render_table(self._servers, self.search_input.text())
 
@@ -168,69 +153,69 @@ class ServersTab(QWidget):
         if connected:
             self.connect_btn.hide()
             self.disconnect_btn.show()
-            self.status_label.setText("Connected")
-            self.status_label.setObjectName("statusConnected")
         else:
             self.connect_btn.show()
             self.disconnect_btn.hide()
-            self.status_label.setText("Disconnected")
-            self.status_label.setObjectName("statusDisconnected")
-        self.status_label.style().unpolish(self.status_label)
-        self.status_label.style().polish(self.status_label)
+
+    def _selected_tag(self):
+        r = {idx.row() for idx in self.table.selectedIndexes()}
+        if not r:
+            return None
+        item = self.table.item(r.pop(), _COL_NAME)
+        return item.data(Qt.ItemDataRole.UserRole) if item else None
 
     def _on_connect(self):
-        rows = {idx.row() for idx in self.table.selectedIndexes()}
-        if not rows:
-            logger.debug("Connect clicked with no selection")
-            return
-
-        row = rows.pop()
-        name_item = self.table.item(row, 0)
-        if name_item:
-            tag = name_item.data(Qt.ItemDataRole.UserRole)
-            logger.info("UI: Connect to server %s", tag)
+        tag = self._selected_tag()
+        if tag:
             self.connect_requested.emit(tag)
 
     def _on_disconnect(self):
-        logger.info("UI: Disconnect clicked")
         self.disconnect_requested.emit()
 
-    def _on_ping_selected(self):
-        rows = {idx.row() for idx in self.table.selectedIndexes()}
-        logger.debug("Ping selected: %d rows selected", len(rows))
-        for row in rows:
-            name_item = self.table.item(row, 0)
-            if name_item:
-                tag = name_item.data(Qt.ItemDataRole.UserRole)
-                self.ping_requested.emit(tag)
-
     def _on_ping_all(self):
-        logger.info("UI: Ping all servers")
         self.ping_requested.emit("__all__")
 
-    def _on_auto_select_changed(self, index: int):
-        if index == 0:
-            logger.info("UI: Auto select (URLTest) chosen")
-            self.connect_requested.emit("__auto__")
+    def _on_ping_server(self, tag: str):
+        self.ping_requested.emit(tag)
+
+    def _on_context_menu(self, pos):
+        tag = self._selected_tag()
+        if not tag:
+            return
+        menu = QMenu(self)
+        a = menu.addAction(tr("ping_selected"))
+        a.triggered.connect(lambda: self._on_ping_server(tag))
+        menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def _on_search(self, text: str):
         self._render_table(self._servers, text)
 
-    def _on_filter(self, protocol: str):
-        logger.debug("Filter changed to: %s", protocol)
-        if protocol == "All Protocols":
-            self._render_table(self._servers, self.search_input.text())
-        else:
-            filtered = [s for s in self._servers if s.protocol == protocol.lower()]
-            self._render_table(filtered, self.search_input.text())
+    def _on_filter_menu(self):
+        menu = QMenu(self.search_input)
+        all_act = menu.addAction(tr("all_protocols"))
+        all_act.setCheckable(True)
+        all_act.setChecked(self._filter_proto == "")
+        all_act.triggered.connect(lambda: self._set_filter(""))
+        menu.addSeparator()
+        for p in _ALL_PROTOCOLS:
+            a = menu.addAction(p.upper())
+            a.setCheckable(True)
+            a.setChecked(self._filter_proto == p)
+            a.triggered.connect(lambda _, x=p: self._set_filter(x))
+        menu.exec(self.search_input.mapToGlobal(
+            self.search_input.rect().bottomRight()))
+
+    def _set_filter(self, proto: str):
+        self._filter_proto = proto
+        self._render_table(self._servers, self.search_input.text())
 
     def _on_header_clicked(self, col: int):
-        if col != 4:
+        if col != _COL_PING:
             return
         self._ping_sort_asc = not self._ping_sort_asc
-        srv = sorted(
-            self._servers,
-            key=lambda s: self._delays.get(s.tag, 99999),
-            reverse=not self._ping_sort_asc,
-        )
-        self._render_table(srv, self.search_input.text())
+        yes = [s for s in self._servers if self._delays.get(s.tag, -1) >= 0]
+        no = [s for s in self._servers if self._delays.get(s.tag, -1) < 0]
+        yes.sort(key=lambda s: self._delays.get(s.tag, 0))
+        if not self._ping_sort_asc:
+            yes.reverse()
+        self._render_table(yes + no, self.search_input.text())

@@ -10,6 +10,7 @@ from core.crypto import get_or_create_vault
 from core.subscription import SubscriptionManager
 from core.settings_manager import SettingsManager
 from core.dual_mgr import DualManager
+from core.translations import set_language
 from ui.main_window import MainWindow
 
 
@@ -67,6 +68,7 @@ def main():
 
     vault = get_or_create_vault()
     settings_mgr = SettingsManager(data_dir)
+    set_language(settings_mgr.settings.language)
     sub_manager = SubscriptionManager(data_dir, vault)
 
     sb_path = find_binary("sing-box.exe")
