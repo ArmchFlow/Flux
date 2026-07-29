@@ -281,12 +281,46 @@ class MainWindow(QMainWindow):
         conf_path = self.data_dir / f"awg_{srv.tag}.conf"
         conf_path.write_text(srv.awg_raw, encoding="utf-8")
         self.xray_mgr.init_amnezia(self.xray_mgr.sb_path.parent)
+
+        # Kill any stale service/adapters first
+        import subprocess as sp
+        sp.run(["sc.exe", "stop", "AmneziaWGTunnel$MyAmnezia"],
+               capture_output=True, timeout=5)
+        sp.run(["sc.exe", "delete", "AmneziaWGTunnel$MyAmnezia"],
+               capture_output=True, timeout=5)
+
         ok, msg = self.xray_mgr.start_amnezia(str(conf_path))
         if ok:
+            # Verify tunnel actually works
+            import time
+            time.sleep(2)
+            try:
+                r = sp.run(["powershell", "-NoProfile", "-Command",
+                    "Get-NetAdapter -Name 'MyAmnezia' -ErrorAction SilentlyContinue | Select-Object Name"],
+                    capture_output=True, text=True, timeout=5)
+                if "MyAmnezia" not in r.stdout:
+                    self.xray_mgr.stop()
+                    QMessageBox.critical(self, tr("connection_failed"),
+                        f"AWG adapter not found.\n"
+                        f"Check C:\\ProgramData\\MyAmnezia\\tunnel_stderr.log\n"
+                        f"{msg}")
+                    self._status_text.setText(" " + tr("connection_failed"))
+                    self._connecting = False
+                    return
+            except Exception:
+                pass
             self.set_connected(True)
             self._status_text.setText(" " + tr("connected_tun") + f" (AWG)")
             logger.info("=== CONNECTED (AWG) ===")
         else:
+            # Show tunnel_stderr.log for diagnostics
+            try:
+                stderr_log = Path("C:\\ProgramData\\MyAmnezia\\tunnel_stderr.log")
+                if stderr_log.exists():
+                    err_text = stderr_log.read_text(encoding="utf-8", errors="replace")[:500]
+                    msg += f"\n\n--- tunnel_stderr.log ---\n{err_text}"
+            except Exception:
+                pass
             QMessageBox.critical(self, tr("connection_failed"), msg)
             self._status_text.setText(" " + tr("connection_failed"))
         self._connecting = False
