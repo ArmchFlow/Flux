@@ -1,9 +1,7 @@
 __pycache__/
 build/build/
-dist/M_*.exe
-dist/x*.exe
-dist/old*.exe
-dist/MyVPN_*.exe
+dist/*.exe
+dist/z_*
 *.log
 logs/
 myvpn.log
