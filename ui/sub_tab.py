@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import QFileDialog
 
 from core.subscription import SubscriptionManager, Subscription
 from core.translations import tr
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 class SubscriptionTab(QWidget):
     update_requested = pyqtSignal(str)
     add_requested = pyqtSignal(str, str)
+    conf_imported = pyqtSignal(str)
 
     def __init__(self, sub_manager: SubscriptionManager, parent=None):
         super().__init__(parent)
@@ -63,6 +65,15 @@ class SubscriptionTab(QWidget):
 
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
+
+        imp_layout = QHBoxLayout()
+        imp_layout.setSpacing(8)
+        import_btn = QPushButton("Import .conf")
+        import_btn.setMinimumHeight(32)
+        import_btn.clicked.connect(self._on_import_conf)
+        imp_layout.addWidget(import_btn)
+        imp_layout.addStretch()
+        layout.addLayout(imp_layout)
 
         self.table = QTableWidget()
         self.table.setColumnCount(5)
@@ -150,6 +161,12 @@ class SubscriptionTab(QWidget):
     def refresh_after_update(self):
         logger.debug("Refreshing subscription list UI")
         self._load_data()
+
+    def _on_import_conf(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import AmneziaWG Config", "", "Config files (*.conf);;All files (*)")
+        if path:
+            self.conf_imported.emit(path)
 
     def _on_context_menu(self, pos):
         rows = {idx.row() for idx in self.table.selectedIndexes()}

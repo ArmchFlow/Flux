@@ -121,6 +121,7 @@ class MainWindow(QMainWindow):
         self._sub_tab = SubscriptionTab(self.sub_manager)
         self._sub_tab.update_requested.connect(self._on_update_sub)
         self._sub_tab.add_requested.connect(self._on_add_sub)
+        self._sub_tab.conf_imported.connect(self._on_conf_imported)
         self._tabs.addTab(self._sub_tab, tr("tab_subscriptions"))
 
         self._settings_tab = SettingsTab(self.settings_mgr)
@@ -187,6 +188,17 @@ class MainWindow(QMainWindow):
                 f"{tr('fetch_err_msg')}\n\n{e}",
             )
 
+    def _on_conf_imported(self, filepath: str):
+        logger.info("UI: importing AWG config: %s", filepath)
+        try:
+            srv = self.sub_manager.import_conf_file(filepath)
+            if srv:
+                self._servers_tab.load_servers()
+                self._status_text.setText(f" Imported: {srv.name}")
+        except Exception as e:
+            logger.error("Import AWG config failed: %s", e, exc_info=True)
+            QMessageBox.critical(self, tr("error"), f"Failed to import config:\n{e}")
+
     def _on_server_selected(self, tag: str):
         logger.info("UI: server selected: %s", tag)
         if tag == "__auto__":
@@ -232,16 +244,25 @@ class MainWindow(QMainWindow):
             self._connecting = False
             return
 
-        logger.info("Building configs for %d servers (selected=%s)...",
-                   len(servers), self._current_proxy_tag)
+        if self.settings_mgr.settings.proxy.auto_select and self._current_proxy_tag == "auto":
+            selected_tag = servers[0].tag
+        else:
+            selected_tag = (
+                self._current_proxy_tag if self._current_proxy_tag != "auto"
+                else servers[0].tag
+            )
+
+        srv = next((s for s in servers if s.tag == selected_tag), None)
+        if not srv:
+            self._connecting = False
+            return
+
+        if srv.protocol == "awg":
+            self._start_awg(srv)
+            return
+
+        logger.info("Building xray config for %s...", selected_tag)
         try:
-            if self.settings_mgr.settings.proxy.auto_select and self._current_proxy_tag == "auto":
-                selected_tag = servers[0].tag
-            else:
-                selected_tag = (
-                    self._current_proxy_tag if self._current_proxy_tag != "auto"
-                    else servers[0].tag
-                )
             xray_cfg = build_xray_proxy_config(servers, selected_tag)
         except Exception as e:
             logger.error("Config build failed: %s", e, exc_info=True)
@@ -255,6 +276,20 @@ class MainWindow(QMainWindow):
             self._vpn_sig.done.emit(success, mode, len(servers))
 
         threading.Thread(target=_work, daemon=True).start()
+
+    def _start_awg(self, srv):
+        conf_path = self.data_dir / f"awg_{srv.tag}.conf"
+        conf_path.write_text(srv.awg_raw, encoding="utf-8")
+        self.xray_mgr.init_amnezia(self.xray_mgr.sb_path.parent)
+        ok, msg = self.xray_mgr.start_amnezia(str(conf_path))
+        if ok:
+            self.set_connected(True)
+            self._status_text.setText(" " + tr("connected_tun") + f" (AWG)")
+            logger.info("=== CONNECTED (AWG) ===")
+        else:
+            QMessageBox.critical(self, tr("connection_failed"), msg)
+            self._status_text.setText(" " + tr("connection_failed"))
+        self._connecting = False
 
     def _on_connect_done(self, success: bool, mode: str, count: int):
         if not self._connecting:

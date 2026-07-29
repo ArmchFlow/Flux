@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 
 from .config_builder import save_config_to_file, build_singbox_tun_config
+from .amnezia_mgr import AmneziaManager
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +21,13 @@ class DualManager:
         self._sb_proc: subprocess.Popen | None = None
         self._xray_proc: subprocess.Popen | None = None
         self._running = False
+        self._amnezia_mgr: AmneziaManager | None = None
+        self._amnezia_config: str = ""
 
     @property
     def is_running(self) -> bool:
-        if self._sb_proc and self._sb_proc.poll() is not None:
-            self._running = False
-        if self._xray_proc and self._xray_proc.poll() is not None:
-            self._running = False
-        return self._running
+        if self._amnezia_mgr and self._amnezia_mgr.is_connected:
+            return True
 
     def _cleanup_tun(self):
         if sys.platform != "win32":
@@ -110,8 +110,25 @@ class DualManager:
             self.stop()
             return False, str(e)
 
+    def init_amnezia(self, bin_dir: Path):
+        if self._amnezia_mgr is None:
+            self._amnezia_mgr = AmneziaManager(bin_dir)
+
+    def start_amnezia(self, config_path: str) -> tuple[bool, str]:
+        logger.info("=== STARTING AMNEZIA WG ===")
+        if self.is_running:
+            self.stop()
+        self._amnezia_config = config_path
+        ok, msg = self._amnezia_mgr.connect(config_path)
+        if ok:
+            self._running = True
+            return True, "AWG"
+        return False, msg
+
     def stop(self):
         logger.info("Stopping...")
+        if self._amnezia_mgr and self._amnezia_mgr.is_connected:
+            self._amnezia_mgr.disconnect()
         for proc in [self._xray_proc, self._sb_proc]:
             if proc:
                 try:

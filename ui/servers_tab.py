@@ -18,7 +18,7 @@ _COL_PROTO = 1
 _COL_PING = 2
 _COL_SUB = 3
 
-_ALL_PROTOCOLS = ["vless", "vmess", "ss", "trojan", "hysteria2"]
+_ALL_PROTOCOLS = ["vless", "vmess", "ss", "trojan", "hysteria2", "awg"]
 
 
 class ServersTab(QWidget):
@@ -133,6 +133,8 @@ class ServersTab(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, srv.tag)
             self.table.setItem(row, _COL_NAME, item)
             pi = QTableWidgetItem(srv.protocol.upper())
+            if srv.protocol == "awg" and srv.encryption:
+                pi = QTableWidgetItem(srv.encryption.upper())
             pi.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row, _COL_PROTO, pi)
             d = self._delays.get(srv.tag, -1)

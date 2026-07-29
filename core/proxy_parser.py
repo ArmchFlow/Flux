@@ -4,9 +4,10 @@ import re
 from dataclasses import dataclass, field
 from urllib.parse import urlparse, parse_qs, unquote
 from typing import Optional
+from pathlib import Path
 
 
-SUPPORTED_PROTOCOLS = {"vless", "vmess", "ss", "trojan", "hysteria2", "hy2"}
+SUPPORTED_PROTOCOLS = {"vless", "vmess", "ss", "trojan", "hysteria2", "hy2", "awg"}
 
 
 @dataclass
@@ -48,6 +49,7 @@ class ProxyServer:
     obfs_host: str = ""
 
     subscription_tag: str = ""
+    awg_raw: str = ""
 
     @property
     def tag(self) -> str:
@@ -447,3 +449,46 @@ def _parse_clash_yaml(data: str) -> list[ProxyServer]:
         servers.append(s)
 
     return servers
+
+
+def _detect_awg_version(raw: str) -> str:
+    if "HeaderProtectionKey" in raw:
+        return "3.0"
+    if "S3" in raw and "S4" in raw:
+        return "2.0"
+    return "1.5"
+
+
+def parse_awg_conf(filepath: str) -> Optional[ProxyServer]:
+    raw = Path(filepath).read_text(encoding="utf-8")
+    s = ProxyServer(protocol="awg")
+    s.awg_raw = raw
+
+    name = Path(filepath).stem
+    s.name = name
+
+    endpoint_m = re.search(r"Endpoint\s*=\s*([^:]+):(\d+)", raw)
+    if endpoint_m:
+        s.server = endpoint_m.group(1).strip("[]")
+        s.port = int(endpoint_m.group(2))
+
+    dns_m = re.search(r"DNS\s*=\s*([^\r\n]+)", raw)
+    if dns_m:
+        s.sni = dns_m.group(1).strip()
+
+    pub_m = re.search(r"PublicKey\s*=\s*(\S+)", raw)
+    if pub_m:
+        s.public_key = pub_m.group(1)
+
+    priv_m = re.search(r"PrivateKey\s*=\s*(\S+)", raw)
+    if priv_m:
+        s.password = priv_m.group(1)
+
+    addr_m = re.search(r"Address\s*=\s*([^\r\n]+)", raw)
+    if addr_m:
+        s.ws_path = addr_m.group(1).strip()
+
+    ver = _detect_awg_version(raw)
+    s.encryption = f"AWG{ver}"
+
+    return s

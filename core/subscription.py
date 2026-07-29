@@ -9,7 +9,7 @@ from typing import Optional
 import requests
 from cryptography.fernet import Fernet
 
-from .proxy_parser import parse_subscription_data, parse_proxy_uri, ProxyServer
+from .proxy_parser import parse_subscription_data, parse_proxy_uri, parse_awg_conf, ProxyServer
 from .crypto import encrypt_dict, decrypt_dict
 from .log_utils import log_call, log_api_call, log_api_response, log_servers
 
@@ -153,6 +153,16 @@ class SubscriptionManager:
         self._save()
         logger.info("Added subscription #%d: %s", len(self.subscriptions), sub.display_name)
         return sub
+
+    @log_call()
+    def import_conf_file(self, filepath: str) -> Optional[ProxyServer]:
+        srv = parse_awg_conf(filepath)
+        if not srv:
+            return None
+        srv.subscription_tag = "Amnezia"
+        self._all_servers_cache = None
+        logger.info("Imported AWG config: %s (%s:%d)", srv.name, srv.server, srv.port)
+        return srv
 
     @log_call()
     def remove_subscription(self, url: str):
