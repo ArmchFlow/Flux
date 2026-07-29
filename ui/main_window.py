@@ -278,7 +278,6 @@ class MainWindow(QMainWindow):
         threading.Thread(target=_work, daemon=True).start()
 
     def _start_awg(self, srv):
-        # Parse tunnel IP from Address for routing fix
         addr = ""
         for line in srv.awg_raw.splitlines():
             s = line.strip().lower()
@@ -286,17 +285,22 @@ class MainWindow(QMainWindow):
                 addr = s.split("=", 1)[1].strip().split(",")[0].strip()
         tun_ip = addr.split("/")[0] if addr else ""
 
-        import subprocess as sp
         conf_path = self.data_dir / f"awg_{srv.tag}.conf"
         conf_path.write_bytes(srv.awg_raw.encode("utf-8"))
         self.xray_mgr.init_amnezia(self.xray_mgr.sb_path.parent)
 
         ok, msg = self.xray_mgr.start_amnezia(str(conf_path))
         if ok:
-            # Add default route through WireGuard TUN adapter
+            import subprocess as sp
+            sp.run(["netsh", "interface", "ip", "delete", "dns",
+                    "MyAmnezia", "all"], capture_output=True, timeout=5)
+            sp.run(["netsh", "interface", "ip", "set", "dns",
+                    "MyAmnezia", "static", "1.1.1.1"],
+                   capture_output=True, timeout=5)
             if tun_ip:
                 sp.run(["route", "add", "0.0.0.0", "mask", "0.0.0.0",
                        tun_ip, "metric", "1"], capture_output=True, timeout=5)
+            sp.run(["ipconfig", "/flushdns"], capture_output=True, timeout=5)
             self.set_connected(True)
             self._status_text.setText(" " + tr("connected_tun") + f" (AWG)")
             logger.info("=== CONNECTED (AWG) ===")
