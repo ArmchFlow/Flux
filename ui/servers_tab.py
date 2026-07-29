@@ -212,10 +212,17 @@ class ServersTab(QWidget):
     def _on_header_clicked(self, col: int):
         if col != _COL_PING:
             return
+        sel = self._selected_tag()
         self._ping_sort_asc = not self._ping_sort_asc
         yes = [s for s in self._servers if self._delays.get(s.tag, -1) >= 0]
         no = [s for s in self._servers if self._delays.get(s.tag, -1) < 0]
         yes.sort(key=lambda s: self._delays.get(s.tag, 0))
         if not self._ping_sort_asc:
             yes.reverse()
-        self._render_table(yes + no, self.search_input.text())
+        self._servers = yes + no
+        self._render_table(self._servers, self.search_input.text())
+        if sel:
+            for row in range(self.table.rowCount()):
+                if self.table.item(row, _COL_NAME) and self.table.item(row, _COL_NAME).data(Qt.ItemDataRole.UserRole) == sel:
+                    self.table.selectRow(row)
+                    break

@@ -1,6 +1,6 @@
 _STRINGS = {
     "en": {
-        "app_title": "MyVPN",
+        "app_title": "Flux",
         "servers": "Servers",
         "subscriptions": "Subscriptions",
         "settings": "Settings",
@@ -107,7 +107,7 @@ _STRINGS = {
         "fetch_err_msg": "Could not fetch the subscription. Check the URL.",
     },
     "ru": {
-        "app_title": "MyVPN",
+        "app_title": "Flux",
         "servers": "Серверы",
         "subscriptions": "Подписки",
         "settings": "Настройки",

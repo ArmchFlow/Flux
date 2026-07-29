@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtGui import QIcon
 
 from core.log_utils import setup_logging
 from core.crypto import get_or_create_vault
@@ -62,9 +63,18 @@ def main():
     logger.info("=" * 60)
 
     app = QApplication(sys.argv)
-    app.setApplicationName("MyVPN")
-    app.setOrganizationName("MyVPN")
+    app.setApplicationName("Flux")
+    app.setOrganizationName("Flux")
     app.setQuitOnLastWindowClosed(False)
+
+    try:
+        base = Path(sys._MEIPASS)
+    except AttributeError:
+        base = Path(__file__).parent
+    for ico in [base / "bin" / "flux.ico", base / "Flux detail.png"]:
+        if ico.exists():
+            app.setWindowIcon(QIcon(str(ico.resolve())))
+            break
 
     vault = get_or_create_vault()
     settings_mgr = SettingsManager(data_dir)

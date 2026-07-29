@@ -1,10 +1,12 @@
 import logging
+import sys
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QTabWidget,
     QStatusBar, QLabel, QPushButton, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QCloseEvent
+from PyQt6.QtGui import QCloseEvent, QIcon
 
 from .sub_tab import SubscriptionTab
 from .servers_tab import ServersTab
@@ -42,7 +44,15 @@ class MainWindow(QMainWindow):
         self._current_proxy_tag = "auto"
 
         logger.info("Initializing MainWindow...")
-        self.setWindowTitle("MyVPN")
+        self.setWindowTitle("Flux")
+        try:
+            base = Path(sys._MEIPASS)
+        except AttributeError:
+            base = Path(__file__).parent.parent
+        for ico in [base / "bin" / "flux.ico", base / "Flux detail.png"]:
+            if ico.exists():
+                self.setWindowIcon(QIcon(str(ico.resolve())))
+                break
         self.setMinimumSize(640, 480)
         self.resize(960, 680)
         self.setStyleSheet(DARK_STYLE)

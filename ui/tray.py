@@ -1,6 +1,24 @@
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
-from PyQt6.QtCore import pyqtSignal, QSize
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QAction
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QIcon, QAction
+import sys
+from pathlib import Path
+
+
+def _tray_icon_path() -> str:
+    try:
+        base = Path(sys._MEIPASS)
+    except AttributeError:
+        base = Path(__file__).parent.parent
+    candidates = [
+        base / "bin" / "flux_tray.png",
+        base / "bin" / "flux.ico",
+        base / "Flux detail.png",
+    ]
+    for p in candidates:
+        if p.exists():
+            return str(p.resolve())
+    return str(candidates[0])
 
 
 class SystemTray(QSystemTrayIcon):
@@ -15,8 +33,9 @@ class SystemTray(QSystemTrayIcon):
         self._setup()
 
     def _setup(self):
-        self.setIcon(self._make_icon(False))
-        self.setToolTip("MyVPN")
+        path = _tray_icon_path()
+        self.setIcon(QIcon(path))
+        self.setToolTip("Flux")
 
         self._menu = QMenu()
 
@@ -46,18 +65,17 @@ class SystemTray(QSystemTrayIcon):
 
     def set_connected(self, connected: bool):
         self._connected = connected
-        self.setIcon(self._make_icon(connected))
 
         if connected:
             self._status_action.setText("Status: Connected")
             self._connect_action.setVisible(False)
             self._disconnect_action.setVisible(True)
-            self.setToolTip("MyVPN - Connected")
+            self.setToolTip("Flux - Connected")
         else:
             self._status_action.setText("Status: Disconnected")
             self._connect_action.setVisible(True)
             self._disconnect_action.setVisible(False)
-            self.setToolTip("MyVPN - Disconnected")
+            self.setToolTip("Flux - Disconnected")
 
     def _on_connect(self):
         self.connect_requested.emit()
@@ -75,24 +93,3 @@ class SystemTray(QSystemTrayIcon):
         if reason in (QSystemTrayIcon.ActivationReason.Trigger,
                       QSystemTrayIcon.ActivationReason.DoubleClick):
             self.show_window_requested.emit()
-
-    def _make_icon(self, connected: bool) -> QIcon:
-        size = 64
-        pixmap = QPixmap(QSize(size, size))
-        pixmap.fill(QColor(0, 0, 0, 0))
-
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        if connected:
-            painter.setBrush(QBrush(QColor("#a6e3a1")))
-            painter.setPen(QColor("#1e1e2e"))
-        else:
-            painter.setBrush(QBrush(QColor("#585b70")))
-            painter.setPen(QColor("#cdd6f4"))
-
-        margin = 8
-        painter.drawEllipse(margin, margin, size - 2 * margin, size - 2 * margin)
-
-        painter.end()
-        return QIcon(pixmap)
