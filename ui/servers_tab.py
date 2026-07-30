@@ -179,6 +179,9 @@ class ServersTab(QWidget):
             else:
                 ping_text = tr("dash")
             self.table.setItem(row, _COL_PING, QTableWidgetItem(ping_text))
+            pi = self.table.item(row, _COL_PING)
+            if pi:
+                pi.setFlags(pi.flags() & ~Qt.ItemFlag.ItemIsEditable)
             si = QTableWidgetItem(srv.subscription_tag)
             si.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             si.setFlags(si.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -234,10 +237,10 @@ class ServersTab(QWidget):
         ping_action = menu.addAction(tr("ping_selected"))
         ping_action.triggered.connect(lambda: self._on_ping_server(tag))
         if tag in self._pinned:
-            pin_action = menu.addAction("Unpin")
+            pin_action = menu.addAction(tr("unpin"))
             pin_action.triggered.connect(lambda: self._toggle_pin(tag))
         else:
-            pin_action = menu.addAction("Pin")
+            pin_action = menu.addAction(tr("pin"))
             pin_action.triggered.connect(lambda: self._toggle_pin(tag))
         menu.exec(self.table.viewport().mapToGlobal(pos))
 

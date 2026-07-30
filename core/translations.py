@@ -106,6 +106,8 @@ _STRINGS = {
         "update_err_msg": "Failed to update the subscription",
         "fetch_err_msg": "Could not fetch the subscription. Check the URL.",
         "import_awg": "Import Amnezia.conf",
+        "pin": "Pin",
+        "unpin": "Unpin",
     },
     "ru": {
         "app_title": "Flux",
@@ -210,6 +212,8 @@ _STRINGS = {
         "update_err_msg": "Ошибка обновления подписки",
         "fetch_err_msg": "Не удалось получить подписку. Проверьте URL.",
         "import_awg": "Импорт Amnezia.conf",
+        "pin": "Закрепить",
+        "unpin": "Открепить",
     },
 }
 

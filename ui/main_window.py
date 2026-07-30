@@ -120,6 +120,7 @@ class MainWindow(QMainWindow):
 
         self._sub_tab = SubscriptionTab(self.sub_manager)
         self._sub_tab.update_requested.connect(self._on_update_sub)
+        self._sub_tab.batch_update_requested.connect(self._on_update_all_subs)
         self._sub_tab.add_requested.connect(self._on_add_sub)
         self._sub_tab.conf_imported.connect(self._on_conf_imported)
         self._tabs.addTab(self._sub_tab, tr("tab_subscriptions"))
@@ -182,6 +183,22 @@ class MainWindow(QMainWindow):
                 f"{tr('update_err_msg')}:\n{e}",
             )
             self._status_text.setText(" " + tr("update_failed"))
+
+    def _on_update_all_subs(self, urls: list):
+        self._status_text.setText(" Updating all subscriptions...")
+        def _work():
+            for url in urls:
+                try:
+                    self.sub_manager.update_subscription(url)
+                except Exception as e:
+                    logger.error("Update failed for %s: %s", url[:60], e)
+            QTimer.singleShot(0, self._refresh_after_all_update)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _refresh_after_all_update(self):
+        self._sub_tab.refresh_after_update()
+        self._servers_tab.load_servers()
+        self._status_text.setText(" All subscriptions updated")
 
     def _on_add_sub(self, url: str, name: str):
         logger.info("UI: add subscription requested: url=%s, name=%s", url[:80], name or "(auto)")
@@ -301,7 +318,13 @@ class MainWindow(QMainWindow):
         conf_path.write_bytes(srv.awg_raw.encode("utf-8"))
         self.xray_mgr.init_amnezia(self.xray_mgr.sb_path.parent)
 
-        ok, msg = self.xray_mgr.start_amnezia(str(conf_path))
+        def _work():
+            import subprocess as sp
+            ok, msg = self.xray_mgr.start_amnezia(str(conf_path))
+            QTimer.singleShot(0, lambda: self._awg_done(ok, msg, tun_ip))
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _awg_done(self, ok: bool, msg: str, tun_ip: str):
         if ok:
             import subprocess as sp
             nf = subprocess.CREATE_NO_WINDOW

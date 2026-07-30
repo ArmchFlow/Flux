@@ -51,12 +51,16 @@ def find_icon(name: str) -> str:
 
 def main():
     lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    lock.settimeout(0.5)
     try:
         lock.bind(("127.0.0.1", 19876))
         lock.listen(1)
     except OSError:
-        from PyQt6.QtWidgets import QMessageBox
-        QMessageBox.information(None, "Flux", "Application is already running.")
+        from PyQt6.QtWidgets import QApplication, QMessageBox
+        app = QApplication(sys.argv)
+        QMessageBox.information(None, "Flux",
+            "Application is already running.\nCheck the system tray.")
+        app.quit()
         return
 
     if sys.platform == "win32":

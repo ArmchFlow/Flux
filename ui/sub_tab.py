@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class SubscriptionTab(QWidget):
     update_requested = pyqtSignal(str)
+    batch_update_requested = pyqtSignal(list)
     add_requested = pyqtSignal(str, str)
     conf_imported = pyqtSignal(str)
 
@@ -110,13 +111,18 @@ class SubscriptionTab(QWidget):
 
     def _load_data(self):
         self.table.setRowCount(0)
+        from PyQt6.QtCore import Qt
 
         for sub in self.sub_manager.subscriptions:
             row = self.table.rowCount()
             self.table.insertRow(row)
 
-            self.table.setItem(row, 0, QTableWidgetItem(sub.display_name))
-            self.table.setItem(row, 1, QTableWidgetItem(sub.url))
+            ni = QTableWidgetItem(sub.display_name)
+            self.table.setItem(row, 0, ni)
+
+            ui = QTableWidgetItem(sub.url)
+            ui.setFlags(ui.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 1, ui)
 
             from datetime import datetime
             if sub.last_updated > 0:
@@ -124,12 +130,21 @@ class SubscriptionTab(QWidget):
                 updated = dt.strftime("%Y-%m-%d %H:%M")
             else:
                 updated = tr("never")
-            self.table.setItem(row, 2, QTableWidgetItem(updated))
+            ut = QTableWidgetItem(updated)
+            ut.setFlags(ut.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 2, ut)
 
-            servers = self.sub_manager.get_cached_servers(sub.url)
-            self.table.setItem(row, 3, QTableWidgetItem(str(len(servers))))
+            sc = QTableWidgetItem(str(len(self.sub_manager.get_cached_servers(sub.url))))
+            sc.setFlags(sc.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 3, sc)
 
             status = tr("active") if sub.enabled else tr("disabled")
+            st = QTableWidgetItem(status)
+            st.setFlags(st.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 4, st)
+            st = QTableWidgetItem(status)
+            st.setFlags(st.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 4, st)
             self.table.setItem(row, 4, QTableWidgetItem(status))
 
     def _on_add(self):
@@ -152,11 +167,9 @@ class SubscriptionTab(QWidget):
             QMessageBox.critical(self, "Error", f"Failed to add subscription:\n{e}")
 
     def _on_update_all(self):
-        count = len(self.sub_manager.subscriptions)
-        for sub in self.sub_manager.subscriptions:
-            if sub.url == "amnezia://imported":
-                continue
-            self.update_requested.emit(sub.url)
+        urls = [sub.url for sub in self.sub_manager.subscriptions
+                if sub.url != "amnezia://imported"]
+        self.batch_update_requested.emit(urls)
 
     def refresh_after_update(self):
         logger.debug("Refreshing subscription list UI")
