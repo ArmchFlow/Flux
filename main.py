@@ -1,6 +1,7 @@
 import sys
 import os
 import logging
+import socket
 from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
@@ -49,6 +50,15 @@ def find_icon(name: str) -> str:
 
 
 def main():
+    lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        lock.bind(("127.0.0.1", 19876))
+        lock.listen(1)
+    except OSError:
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(None, "Flux", "Application is already running.")
+        return
+
     if sys.platform == "win32":
         import ctypes
         ctypes.windll.kernel32.SetConsoleCP(65001)

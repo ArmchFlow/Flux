@@ -4,8 +4,9 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView,
     QLabel, QLineEdit, QMenu,
 )
+from pathlib import Path
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QFont
 
 from core.subscription import SubscriptionManager
 from core.proxy_parser import ProxyServer
@@ -35,7 +36,25 @@ class ServersTab(QWidget):
         self._connected = False
         self._ping_sort_asc = True
         self._filter_proto = ""
+        self._pinned: set[str] = set()
+        self._pinned_file = Path(sub_manager.data_dir) / "pinned.json"
+        self._load_pinned()
         self._setup_ui()
+
+    def _load_pinned(self):
+        try:
+            if self._pinned_file.exists():
+                import json
+                self._pinned = set(json.loads(self._pinned_file.read_text(encoding="utf-8")))
+        except Exception:
+            self._pinned = set()
+
+    def _save_pinned(self):
+        try:
+            import json
+            self._pinned_file.write_text(json.dumps(list(self._pinned)), encoding="utf-8")
+        except Exception:
+            pass
 
     def _setup_ui(self):
         vbox = QVBoxLayout(self)
@@ -94,7 +113,7 @@ class ServersTab(QWidget):
 
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._on_context_menu)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
         self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         header = self.table.horizontalHeader()
@@ -117,7 +136,20 @@ class ServersTab(QWidget):
     def _render_table(self, servers: list[ProxyServer], filter_text: str = ""):
         self.table.setRowCount(0)
         self._rows = []
-        for srv in servers:
+
+        def match(s):
+            if self._filter_proto and s.protocol.lower() != self._filter_proto:
+                return False
+            if filter_text:
+                t = filter_text.lower()
+                return (t in s.display_name.lower() or t in s.server.lower()
+                        or t in s.protocol.lower())
+            return True
+
+        pinned = [s for s in servers if s.tag in self._pinned and match(s)]
+        unpinned = [s for s in servers if s.tag not in self._pinned and match(s)]
+
+        for srv in pinned + unpinned:
             if self._filter_proto and srv.protocol.lower() != self._filter_proto:
                 continue
             if filter_text:
@@ -136,6 +168,8 @@ class ServersTab(QWidget):
             if srv.protocol == "awg" and srv.encryption:
                 pi = QTableWidgetItem(srv.encryption.upper())
             pi.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            pi.setFlags(pi.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, _COL_PROTO, pi)
             self.table.setItem(row, _COL_PROTO, pi)
             d = self._delays.get(srv.tag, -1)
             if d >= 0:
@@ -147,6 +181,7 @@ class ServersTab(QWidget):
             self.table.setItem(row, _COL_PING, QTableWidgetItem(ping_text))
             si = QTableWidgetItem(srv.subscription_tag)
             si.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            si.setFlags(si.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, _COL_SUB, si)
 
     def update_delays(self, delays: dict[str, int]):
@@ -196,9 +231,23 @@ class ServersTab(QWidget):
         if not tag:
             return
         menu = QMenu(self)
-        a = menu.addAction(tr("ping_selected"))
-        a.triggered.connect(lambda: self._on_ping_server(tag))
+        ping_action = menu.addAction(tr("ping_selected"))
+        ping_action.triggered.connect(lambda: self._on_ping_server(tag))
+        if tag in self._pinned:
+            pin_action = menu.addAction("Unpin")
+            pin_action.triggered.connect(lambda: self._toggle_pin(tag))
+        else:
+            pin_action = menu.addAction("Pin")
+            pin_action.triggered.connect(lambda: self._toggle_pin(tag))
         menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    def _toggle_pin(self, tag: str):
+        if tag in self._pinned:
+            self._pinned.discard(tag)
+        else:
+            self._pinned.add(tag)
+        self._save_pinned()
+        self._render_table(self._servers, self.search_input.text())
 
     def _on_search(self, text: str):
         self._render_table(self._servers, text)

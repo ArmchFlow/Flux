@@ -156,11 +156,23 @@ class MainWindow(QMainWindow):
 
     def _on_update_sub(self, url: str):
         logger.info("UI: update requested for subscription: %s", url[:80])
+        sel_tag = None
+        rows = {idx.row() for idx in self._servers_tab.table.selectedIndexes()}
+        if rows:
+            item = self._servers_tab.table.item(rows.pop(), 0)
+            if item:
+                sel_tag = item.data(Qt.ItemDataRole.UserRole)
         self._status_text.setText(f" Updating subscription: {url[:60]}...")
         try:
             servers = self.sub_manager.update_subscription(url)
             self._sub_tab.refresh_after_update()
             self._servers_tab.load_servers()
+            if sel_tag:
+                for r in range(self._servers_tab.table.rowCount()):
+                    it = self._servers_tab.table.item(r, 0)
+                    if it and it.data(Qt.ItemDataRole.UserRole) == sel_tag:
+                        self._servers_tab.table.selectRow(r)
+                        break
             logger.info("Subscription updated: %d servers from %s", len(servers), url[:60])
             self._status_text.setText(f" Subscription updated: {len(servers)} servers")
         except Exception as e:
@@ -292,15 +304,21 @@ class MainWindow(QMainWindow):
         ok, msg = self.xray_mgr.start_amnezia(str(conf_path))
         if ok:
             import subprocess as sp
+            nf = subprocess.CREATE_NO_WINDOW
             sp.run(["netsh", "interface", "ip", "delete", "dns",
-                    "MyAmnezia", "all"], capture_output=True, timeout=5)
+                    "MyAmnezia", "all"], capture_output=True, timeout=5,
+                   creationflags=nf)
             sp.run(["netsh", "interface", "ip", "set", "dns",
                     "MyAmnezia", "static", "1.1.1.1"],
-                   capture_output=True, timeout=5)
+                   capture_output=True, timeout=5, creationflags=nf)
             if tun_ip:
+                sp.run(["route", "delete", "0.0.0.0", "mask", "0.0.0.0",
+                       tun_ip], capture_output=True, timeout=5, creationflags=nf)
                 sp.run(["route", "add", "0.0.0.0", "mask", "0.0.0.0",
-                       tun_ip, "metric", "1"], capture_output=True, timeout=5)
-            sp.run(["ipconfig", "/flushdns"], capture_output=True, timeout=5)
+                       tun_ip, "metric", "1"], capture_output=True, timeout=5,
+                       creationflags=nf)
+            sp.run(["ipconfig", "/flushdns"], capture_output=True, timeout=5,
+                   creationflags=nf)
             self.set_connected(True)
             self._status_text.setText(" " + tr("connected_tun") + f" (AWG)")
             logger.info("=== CONNECTED (AWG) ===")
