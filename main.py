@@ -1,10 +1,13 @@
 import sys
 import os
+import json
 import logging
 import socket
+import threading
 from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
 
 from core.log_utils import setup_logging
@@ -49,18 +52,50 @@ def find_icon(name: str) -> str:
     return ""
 
 
+LOCK_PORT = 19876
+
+
+def _send_show_to_running():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(2.0)
+        s.connect(("127.0.0.1", LOCK_PORT))
+        s.sendall(json.dumps({"action": "show"}).encode("utf-8"))
+        s.close()
+        return True
+    except Exception:
+        return False
+
+
+def _listen_for_show(sock, win):
+    while True:
+        try:
+            conn, _ = sock.accept()
+            data = conn.recv(4096)
+            if data:
+                msg = json.loads(data.decode("utf-8"))
+                if msg.get("action") == "show":
+                    QTimer.singleShot(0, win._show_from_tray)
+            conn.close()
+        except socket.timeout:
+            continue
+        except Exception:
+            break
+
+
 def main():
     lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     lock.settimeout(0.5)
     try:
-        lock.bind(("127.0.0.1", 19876))
+        lock.bind(("127.0.0.1", LOCK_PORT))
         lock.listen(1)
     except OSError:
-        from PyQt6.QtWidgets import QApplication, QMessageBox
-        app = QApplication(sys.argv)
+        if _send_show_to_running():
+            return
+        _fallback_app = QApplication(sys.argv)
         QMessageBox.information(None, "Flux",
-            "Application is already running.\nCheck the system tray.")
-        app.quit()
+            "Application is already running.\nCannot find the running window.")
+        _fallback_app.quit()
         return
 
     if sys.platform == "win32":
@@ -120,6 +155,10 @@ def main():
     logger.info("sing-box: %s, xray: %s", sb_path.exists(), xr_path.exists())
 
     window = MainWindow(sub_manager, settings_mgr, dual_mgr, vault, data_dir)
+
+    threading.Thread(
+        target=_listen_for_show, args=(lock, window), daemon=True,
+    ).start()
 
     logger.info("Entering Qt event loop...")
     exit_code = app.exec()

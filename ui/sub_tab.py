@@ -74,28 +74,20 @@ class SubscriptionTab(QWidget):
         layout.addLayout(btn_layout)
 
         self.table = QTableWidget()
-
-        self.table = QTableWidget()
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels([
             tr("name"), tr("url"), tr("last_updated"),
             tr("servers_count"), tr("status")
         ])
         self.table.setAlternatingRowColors(True)
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         self.table.setShowGrid(False)
         self.table.verticalHeader().setVisible(False)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._on_context_menu)
-        self.table.setHorizontalHeaderLabels([
-            "Name", "URL", "Last Updated", "Servers", "Status"
-        ])
-        self.table.setAlternatingRowColors(True)
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        self.table.setShowGrid(False)
-        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
+        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.table.cellChanged.connect(self._on_cell_changed)
 
         header = self.table.horizontalHeader()
         header.setStretchLastSection(True)
@@ -110,42 +102,43 @@ class SubscriptionTab(QWidget):
         layout.addWidget(self.table)
 
     def _load_data(self):
-        self.table.setRowCount(0)
-        from PyQt6.QtCore import Qt
+        self.table.blockSignals(True)
+        try:
+            self.table.setRowCount(0)
+            from PyQt6.QtCore import Qt
 
-        for sub in self.sub_manager.subscriptions:
-            row = self.table.rowCount()
-            self.table.insertRow(row)
+            for sub in self.sub_manager.subscriptions:
+                row = self.table.rowCount()
+                self.table.insertRow(row)
 
-            ni = QTableWidgetItem(sub.display_name)
-            self.table.setItem(row, 0, ni)
+                ni = QTableWidgetItem(sub.display_name)
+                self.table.setItem(row, 0, ni)
 
-            ui = QTableWidgetItem(sub.url)
-            ui.setFlags(ui.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 1, ui)
+                ui = QTableWidgetItem(sub.url)
+                ui.setFlags(ui.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.table.setItem(row, 1, ui)
 
-            from datetime import datetime
-            if sub.last_updated > 0:
-                dt = datetime.fromtimestamp(sub.last_updated)
-                updated = dt.strftime("%Y-%m-%d %H:%M")
-            else:
-                updated = tr("never")
-            ut = QTableWidgetItem(updated)
-            ut.setFlags(ut.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 2, ut)
+                from datetime import datetime
+                if sub.last_updated > 0:
+                    dt = datetime.fromtimestamp(sub.last_updated)
+                    updated = dt.strftime("%Y-%m-%d %H:%M")
+                else:
+                    updated = tr("never")
+                ut = QTableWidgetItem(updated)
+                ut.setFlags(ut.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.table.setItem(row, 2, ut)
 
-            sc = QTableWidgetItem(str(len(self.sub_manager.get_cached_servers(sub.url))))
-            sc.setFlags(sc.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 3, sc)
+                sc = QTableWidgetItem(str(len(self.sub_manager.get_cached_servers(sub.url))))
+                sc.setFlags(sc.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.table.setItem(row, 3, sc)
 
-            status = tr("active") if sub.enabled else tr("disabled")
-            st = QTableWidgetItem(status)
-            st.setFlags(st.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 4, st)
-            st = QTableWidgetItem(status)
-            st.setFlags(st.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 4, st)
-            self.table.setItem(row, 4, QTableWidgetItem(status))
+                st = QTableWidgetItem(
+                    tr("active") if sub.enabled else tr("disabled")
+                )
+                st.setFlags(st.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.table.setItem(row, 4, st)
+        finally:
+            self.table.blockSignals(False)
 
     def _on_add(self):
         url = self.url_input.text().strip()
@@ -171,6 +164,25 @@ class SubscriptionTab(QWidget):
                 if sub.url != "amnezia://imported"]
         self.batch_update_requested.emit(urls)
 
+    def _on_cell_changed(self, row, col):
+        if col != 0:
+            return
+        url_item = self.table.item(row, 1)
+        name_item = self.table.item(row, 0)
+        if not url_item or not name_item:
+            return
+        url = url_item.text()
+        new_name = name_item.text().strip()
+        if not new_name:
+            return
+        for sub in self.sub_manager.subscriptions:
+            if sub.url == url:
+                if sub.name != new_name:
+                    sub.name = new_name
+                    self.sub_manager._save()
+                    logger.info("Subscription name updated: %s", url[:60])
+                break
+
     def refresh_after_update(self):
         logger.debug("Refreshing subscription list UI")
         self._load_data()
@@ -182,11 +194,10 @@ class SubscriptionTab(QWidget):
             self.conf_imported.emit(path)
 
     def _on_context_menu(self, pos):
-        rows = {idx.row() for idx in self.table.selectedIndexes()}
-        if not rows:
+        item = self.table.itemAt(pos)
+        if not item:
             return
-        row = rows.pop()
-        url_item = self.table.item(row, 1)
+        url_item = self.table.item(item.row(), 1)
         if not url_item:
             return
         url = url_item.text()

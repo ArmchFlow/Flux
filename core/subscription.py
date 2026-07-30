@@ -211,7 +211,7 @@ class SubscriptionManager:
             resp = requests.get(
                 url,
                 headers={"User-Agent": USER_AGENT},
-                timeout=30,
+                timeout=15,
                 allow_redirects=True,
             )
             log_api_response(logger, "GET", url, resp.status_code,

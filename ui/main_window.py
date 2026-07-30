@@ -1,6 +1,7 @@
 import logging
 import sys
 import threading
+import subprocess
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QTabWidget,
@@ -50,6 +51,15 @@ class MainWindow(QMainWindow):
         self._connecting = False
         self._vpn_sig = _VpnSignals()
         self._vpn_sig.done.connect(self._on_connect_done)
+
+        if sys.platform == "win32":
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            if not kernel32.AllocConsole():
+                kernel32.AttachConsole(-1)
+            kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 0)
+            ctypes.windll.user32.ShowWindow(
+                kernel32.GetConsoleWindow(), 0)
 
         logger.info("Initializing MainWindow...")
         self.setWindowTitle("Flux")
@@ -186,18 +196,35 @@ class MainWindow(QMainWindow):
 
     def _on_update_all_subs(self, urls: list):
         self._status_text.setText(" Updating all subscriptions...")
+        total = len(urls)
         def _work():
-            for url in urls:
-                try:
-                    self.sub_manager.update_subscription(url)
-                except Exception as e:
-                    logger.error("Update failed for %s: %s", url[:60], e)
-            QTimer.singleShot(0, self._refresh_after_all_update)
+            try:
+                for i, url in enumerate(urls, 1):
+                    QTimer.singleShot(0, lambda i=i: self._status_text.setText(
+                        f" Updating subscription {i}/{total}..."))
+                    try:
+                        self.sub_manager.update_subscription(url)
+                    except Exception as e:
+                        logger.error("Update failed for %s: %s", url[:60], e)
+            finally:
+                QTimer.singleShot(0, self._refresh_after_all_update)
         threading.Thread(target=_work, daemon=True).start()
 
     def _refresh_after_all_update(self):
+        sel_tag = None
+        rows = {idx.row() for idx in self._servers_tab.table.selectedIndexes()}
+        if rows:
+            item = self._servers_tab.table.item(rows.pop(), 0)
+            if item:
+                sel_tag = item.data(Qt.ItemDataRole.UserRole)
         self._sub_tab.refresh_after_update()
         self._servers_tab.load_servers()
+        if sel_tag:
+            for r in range(self._servers_tab.table.rowCount()):
+                it = self._servers_tab.table.item(r, 0)
+                if it and it.data(Qt.ItemDataRole.UserRole) == sel_tag:
+                    self._servers_tab.table.selectRow(r)
+                    break
         self._status_text.setText(" All subscriptions updated")
 
     def _on_add_sub(self, url: str, name: str):
@@ -306,49 +333,79 @@ class MainWindow(QMainWindow):
 
         threading.Thread(target=_work, daemon=True).start()
 
+    @staticmethod
+    def _get_physical_gateway() -> str:
+        try:
+            import subprocess
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-NetRoute -DestinationPrefix '0.0.0.0/0' "
+                 "| Select-Object -First 1 -ExpandProperty NextHop"],
+                capture_output=True, text=True, timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            return r.stdout.strip()
+        except Exception:
+            return ""
+
     def _start_awg(self, srv):
         addr = ""
+        dns = "1.1.1.1"
+        endpoint_ip = ""
         for line in srv.awg_raw.splitlines():
             s = line.strip().lower()
             if s.startswith("address") and "=" in s:
                 addr = s.split("=", 1)[1].strip().split(",")[0].strip()
+            if s.startswith("dns") and "=" in s:
+                raw_dns = s.split("=", 1)[1].strip().split(",")[0].strip()
+                if raw_dns:
+                    dns = raw_dns
+            if s.startswith("endpoint") and "=" in s:
+                ep = s.split("=", 1)[1].strip()
+                if ":" in ep:
+                    endpoint_ip = ep.rsplit(":", 1)[0]
+                else:
+                    endpoint_ip = ep
         tun_ip = addr.split("/")[0] if addr else ""
 
         conf_path = self.data_dir / f"awg_{srv.tag}.conf"
         conf_path.write_bytes(srv.awg_raw.encode("utf-8"))
         self.xray_mgr.init_amnezia(self.xray_mgr.sb_path.parent)
 
-        def _work():
-            import subprocess as sp
-            ok, msg = self.xray_mgr.start_amnezia(str(conf_path))
-            QTimer.singleShot(0, lambda: self._awg_done(ok, msg, tun_ip))
-        threading.Thread(target=_work, daemon=True).start()
 
-    def _awg_done(self, ok: bool, msg: str, tun_ip: str):
-        if ok:
-            import subprocess as sp
-            nf = subprocess.CREATE_NO_WINDOW
-            sp.run(["netsh", "interface", "ip", "delete", "dns",
-                    "MyAmnezia", "all"], capture_output=True, timeout=5,
-                   creationflags=nf)
-            sp.run(["netsh", "interface", "ip", "set", "dns",
-                    "MyAmnezia", "static", "1.1.1.1"],
-                   capture_output=True, timeout=5, creationflags=nf)
-            if tun_ip:
-                sp.run(["route", "delete", "0.0.0.0", "mask", "0.0.0.0",
-                       tun_ip], capture_output=True, timeout=5, creationflags=nf)
-                sp.run(["route", "add", "0.0.0.0", "mask", "0.0.0.0",
-                       tun_ip, "metric", "1"], capture_output=True, timeout=5,
-                       creationflags=nf)
-            sp.run(["ipconfig", "/flushdns"], capture_output=True, timeout=5,
-                   creationflags=nf)
-            self.set_connected(True)
-            self._status_text.setText(" " + tr("connected_tun") + f" (AWG)")
-            logger.info("=== CONNECTED (AWG) ===")
-        else:
-            QMessageBox.critical(self, tr("connection_failed"), msg)
-            self._status_text.setText(" " + tr("connection_failed"))
-        self._connecting = False
+        def _work():
+            ok = False
+            msg = ""
+            try:
+                logger.info("=== STARTING AMNEZIA WG (async) ===")
+                ok, msg = self.xray_mgr.start_amnezia(str(conf_path))
+                if ok:
+                    logger.info("=== AMNEZIA WG OK, configuring anti-lockout route ===")
+                    nf = subprocess.CREATE_NO_WINDOW
+
+                    if endpoint_ip:
+                        gw = self._get_physical_gateway()
+                        if gw:
+                            try:
+                                subprocess.run(["route", "add", endpoint_ip, "mask",
+                                               "255.255.255.255", gw, "metric", "1"],
+                                              capture_output=True, timeout=30, creationflags=nf)
+                                logger.info("Anti-lockout route: %s via %s",
+                                            endpoint_ip, gw)
+                            except subprocess.TimeoutExpired:
+                                logger.warning("Anti-lockout route add timed out (30s), continuing anyway")
+                            except Exception as e:
+                                logger.warning("Anti-lockout route add failed: %s", e)
+                    logger.info("=== AMNEZIA WG anti-lockout configured ===")
+                else:
+                    logger.error("=== AMNEZIA WG failed: %s ===", msg)
+            except Exception as e:
+                logger.exception("AMNEZIA WG thread error: %s", e)
+                ok, msg = False, f"Thread error: {e}"
+            finally:
+                self._vpn_sig.done.emit(ok, msg, 0)
+
+        threading.Thread(target=_work, daemon=True).start()
 
     def _on_connect_done(self, success: bool, mode: str, count: int):
         if not self._connecting:
@@ -356,8 +413,12 @@ class MainWindow(QMainWindow):
         self._connecting = False
         if success:
             self.set_connected(True)
-            self._status_text.setText(" " + tr("connected_tun") + f" ({count} " + tr("servers_count").lower() + ")")
-            logger.info("=== CONNECTED (%s) ===", mode)
+            if mode == "AWG":
+                self._status_text.setText(" " + tr("connected_tun") + " (AWG)")
+                logger.info("=== CONNECTED (AWG) ===")
+            else:
+                self._status_text.setText(" " + tr("connected_tun") + f" ({count} " + tr("servers_count").lower() + ")")
+                logger.info("=== CONNECTED (%s) ===", mode)
         else:
             logger.error("=== CONNECTION FAILED ===")
             QMessageBox.critical(self, tr("connection_failed"), mode or "Could not start.")

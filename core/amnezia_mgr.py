@@ -67,14 +67,15 @@ class AmneziaManager:
     def kill_stale_service():
         if sys.platform != "win32":
             return
+        flags = subprocess.CREATE_NO_WINDOW
         try:
             subprocess.run(
                 ["sc.exe", "stop", "AmneziaWGTunnel$MyAmnezia"],
-                capture_output=True, timeout=5,
+                capture_output=True, timeout=5, creationflags=flags,
             )
             subprocess.run(
                 ["sc.exe", "delete", "AmneziaWGTunnel$MyAmnezia"],
-                capture_output=True, timeout=5,
+                capture_output=True, timeout=5, creationflags=flags,
             )
         except Exception:
             pass
