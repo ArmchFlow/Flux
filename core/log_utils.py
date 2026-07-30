@@ -59,7 +59,7 @@ def setup_logging(data_dir: Path, level=logging.DEBUG):
     global _log_initialized, _handler
 
     data_dir.mkdir(parents=True, exist_ok=True)
-    log_file = data_dir / "myvpn.log"
+    log_file = data_dir / "flux.log"
 
     root_logger = logging.getLogger()
     root_logger.setLevel(level)

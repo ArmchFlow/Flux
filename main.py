@@ -120,7 +120,7 @@ def main():
     _sys.excepthook = _crash_handler
 
     logger.info("=" * 60)
-    logger.info("  MyVPN STARTING  PID=%s", os.getpid())
+    logger.info("  Flux STARTING  PID=%s", os.getpid())
     logger.info("=" * 60)
 
     app = QApplication(sys.argv)
@@ -163,7 +163,7 @@ def main():
     logger.info("Entering Qt event loop...")
     exit_code = app.exec()
     dual_mgr.stop()
-    logger.info("MyVPN stopped")
+    logger.info("Flux stopped")
     return exit_code
 
 

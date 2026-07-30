@@ -43,8 +43,8 @@ class DualManager:
                 ["powershell", "-NoProfile", "-Command",
                  "$adapters = Get-NetAdapter -ErrorAction SilentlyContinue "
                  "| Where-Object { $_.Name -like '*singbox*' -or "
-                 "$_.Name -like '*myvpn*' -or $_.Name -like '*wintun*' "
-                 "-or $_.Name -like '*MyAmnezia*' -or $_.Name -like '*Amnezia*' }; "
+                 "$_.Name -like '*flux*' -or $_.Name -like '*wintun*' "
+                 "-or $_.Name -like '*Flux*' -or $_.Name -like '*Amnezia*' }; "
                  "if ($adapters) { "
                  "$adapters | ForEach-Object { "
                  "Write-Output \\\"DEL adapter $($_.Name)\\\"; "

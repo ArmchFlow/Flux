@@ -495,7 +495,7 @@ class MainWindow(QMainWindow):
         log_path.mkdir(parents=True, exist_ok=True)
         from datetime import datetime
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        final_log = log_path / f"myvpn_exit_{ts}.log"
+        final_log = log_path / f"flux_exit_{ts}.log"
 
         from core.log_utils import get_signal_handler
         handler = get_signal_handler()

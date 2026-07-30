@@ -8,9 +8,9 @@ logger = logging.getLogger(__name__)
 
 _ERR_MSGS = {
     1: "tunnel_service.exe or tunnel.dll not found in AmneziaLib directory",
-    2: "failed to write config to C:\\ProgramData\\MyAmnezia",
+    2: "failed to write config to C:\\ProgramData\\Flux",
     3: "failed to install Windows service (run as admin)",
-    4: "service started but tunnel failed (check C:\\ProgramData\\MyAmnezia\\*.log)",
+    4: "service started but tunnel failed (check C:\\ProgramData\\Flux\\*.log)",
 }
 
 
@@ -70,11 +70,11 @@ class AmneziaManager:
         flags = subprocess.CREATE_NO_WINDOW
         try:
             subprocess.run(
-                ["sc.exe", "stop", "AmneziaWGTunnel$MyAmnezia"],
+                ["sc.exe", "stop", "FluxWGTunnel$Flux"],
                 capture_output=True, timeout=5, creationflags=flags,
             )
             subprocess.run(
-                ["sc.exe", "delete", "AmneziaWGTunnel$MyAmnezia"],
+                ["sc.exe", "delete", "FluxWGTunnel$Flux"],
                 capture_output=True, timeout=5, creationflags=flags,
             )
         except Exception:
