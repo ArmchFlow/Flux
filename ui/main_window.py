@@ -31,9 +31,10 @@ from cryptography.fernet import Fernet
 
 logger = logging.getLogger(__name__)
 
-_DOWNLOAD_TEST_URL = "https://speed.cloudflare.com/__down?bytes=15728640"
+_DOWNLOAD_TEST_URL = "https://speed.cloudflare.com/__down?bytes=94371840"
 _UPLOAD_TEST_URL = "https://speed.cloudflare.com/__up"
-_UPLOAD_TEST_BYTES = 10 * 1024 * 1024
+_DOWNLOAD_DURATION_S = 8.0
+_UPLOAD_DURATION_S = 6.0
 _RECONNECT_MAX_ATTEMPTS = 3
 _RECONNECT_DELAY_MS = 3000
 
@@ -71,7 +72,8 @@ class MainWindow(QMainWindow):
         self._vpn_sig.done.connect(self._on_connect_done)
         self._speed_sig = _SpeedSignals()
         self._speed_sig.done.connect(self._on_speed_done)
-        self._traffic = TrafficMonitor()
+        extra = [self.settings_mgr.settings.tun.interface_name]
+        self._traffic = TrafficMonitor(extra_patterns=extra)
 
         if sys.platform == "win32":
             import ctypes
@@ -666,9 +668,12 @@ class MainWindow(QMainWindow):
                 self._speed_sig.done.emit(
                     True, tr("speed_result").format(
                         f"{down:.2f}", f"{up:.2f}"))
+            except requests.Timeout:
+                logger.error("Speed test timeout")
+                self._speed_sig.done.emit(False, tr("speed_timeout"))
             except Exception as e:
                 logger.error("Speed test failed: %s", e)
-                self._speed_sig.done.emit(False, tr("speed_timeout"))
+                self._speed_sig.done.emit(False, tr("speed_error").format(e))
 
         threading.Thread(target=_work, daemon=True).start()
 
@@ -782,16 +787,16 @@ def _format_uptime(secs: int) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
-def _measure_download(timeout: float = 45.0) -> float:
-    import urllib.request
+def _measure_download(duration: float = _DOWNLOAD_DURATION_S) -> float:
+    import requests
     start = time.perf_counter()
     size = 0
-    req = urllib.request.Request(
-        _DOWNLOAD_TEST_URL, headers={"User-Agent": "Flux/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        while True:
-            chunk = r.read(65536)
-            if not chunk:
+    with requests.get(
+            _DOWNLOAD_TEST_URL, stream=True, timeout=(10, 30),
+            headers={"User-Agent": "Flux/1.0"}) as r:
+        r.raise_for_status()
+        for chunk in r.iter_content(chunk_size=65536):
+            if time.perf_counter() - start >= duration:
                 break
             size += len(chunk)
     dt = time.perf_counter() - start
@@ -800,19 +805,26 @@ def _measure_download(timeout: float = 45.0) -> float:
     return size / 1024 / 1024 / dt
 
 
-def _measure_upload(timeout: float = 45.0) -> float:
-    import urllib.request
-    payload = b"x" * _UPLOAD_TEST_BYTES
-    req = urllib.request.Request(
-        _UPLOAD_TEST_URL, data=payload, method="POST",
+def _measure_upload(duration: float = _UPLOAD_DURATION_S) -> float:
+    import requests
+    sent = [0]
+
+    def gen():
+        chunk = b"x" * 262144
+        end = time.perf_counter() + duration
+        while time.perf_counter() < end:
+            sent[0] += len(chunk)
+            yield chunk
+
+    start = time.perf_counter()
+    r = requests.post(
+        _UPLOAD_TEST_URL, data=gen(), timeout=(10, 30),
         headers={
             "User-Agent": "Flux/1.0",
             "Content-Type": "application/octet-stream",
         })
-    start = time.perf_counter()
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        r.read()
-    dt = time.perf_counter() - start
+    r.raise_for_status()
+    dt = min(time.perf_counter() - start, duration)
     if dt <= 0:
         return 0.0
-    return _UPLOAD_TEST_BYTES / 1024 / 1024 / dt
+    return sent[0] / 1024 / 1024 / dt

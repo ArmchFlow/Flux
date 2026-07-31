@@ -62,7 +62,7 @@ class AppSettings:
     minimize_to_tray: bool = True
     start_minimized: bool = False
     auto_connect: bool = False
-    auto_reconnect: bool = False
+    auto_reconnect: bool = True
     language: str = "ru"
 
 

@@ -42,7 +42,8 @@ class DualManager:
             r = subprocess.run(
                 ["powershell", "-NoProfile", "-Command",
                  "$adapters = Get-NetAdapter -ErrorAction SilentlyContinue "
-                 "| Where-Object { $_.Name -like '*singbox*' -or "
+                 "| Where-Object { $_.Name -like '*flux*' -or "
+                 "$_.Name -like '*singbox*' -or $_.Name -like '*sing-box*' -or "
                  "$_.Name -like '*myvpn*' -or $_.Name -like '*wintun*' "
                  "-or $_.Name -like '*MyAmnezia*' -or $_.Name -like '*Amnezia*' }; "
                  "if ($adapters) { "

@@ -7,12 +7,13 @@ import time
 logger = logging.getLogger(__name__)
 
 _ADAPTER_PATTERN = (
-    "*singbox*", "*myvpn*", "*wintun*", "*amnezia*", "*Amnezia*"
+    "*flux*", "*singbox*", "*sing-box*", "*myvpn*",
+    "*wintun*", "*amnezia*", "*Amnezia*",
 )
 
 
 class TrafficMonitor:
-    def __init__(self):
+    def __init__(self, extra_patterns: list[str] | None = None):
         self._lock = threading.Lock()
         self._running = False
         self._thread = None
@@ -22,6 +23,12 @@ class TrafficMonitor:
         self._total_down = 0
         self._session_start = 0.0
         self._first = True
+        patterns = list(_ADAPTER_PATTERN)
+        for p in extra_patterns or []:
+            p = (p or "").strip()
+            if p:
+                patterns.append(f"*{p}*")
+        self._patterns = tuple(dict.fromkeys(patterns))
 
     @property
     def is_running(self) -> bool:
@@ -54,7 +61,7 @@ class TrafficMonitor:
                 self._running = False
             return
         patterns = " -or ".join(
-            "$_.Name -like '{}'".format(p) for p in _ADAPTER_PATTERN
+            "$_.Name -like '{}'".format(p) for p in self._patterns
         )
         ps = (
             "while ($true) { "
