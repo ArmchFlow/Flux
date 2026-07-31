@@ -1,8 +1,11 @@
 import logging
+import sys
+from pathlib import Path
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QFormLayout,
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QGroupBox, QCheckBox, QSpinBox, QLineEdit,
     QComboBox, QLabel, QScrollArea, QPushButton,
+    QDialog, QTabWidget, QTextBrowser,
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QSize, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QIcon
@@ -199,6 +202,68 @@ class SettingsTab(QWidget):
         save_btn.setMinimumHeight(40)
         save_btn.clicked.connect(self._save_settings)
         outer.addWidget(save_btn)
+
+        about_btn = QPushButton(tr("about_licenses"))
+        about_btn.setObjectName("ghostBtn")
+        about_btn.setMinimumHeight(32)
+        about_btn.clicked.connect(self._show_about)
+        outer.addWidget(about_btn)
+
+    @staticmethod
+    def _resource_path(name: str) -> Path:
+        try:
+            base = Path(sys._MEIPASS)
+        except AttributeError:
+            base = Path(__file__).resolve().parent.parent
+        return base / name
+
+    def _show_about(self):
+        dialog = QDialog(self)
+        dialog.setObjectName("aboutDialog")
+        dialog.setWindowTitle(tr("about_title"))
+        dialog.setModal(True)
+        dialog.setMinimumSize(560, 420)
+        dialog.resize(640, 480)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 20, 20, 16)
+        layout.setSpacing(12)
+
+        intro = QLabel(tr("about_intro").format(version="1.0"))
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        tabs = QTabWidget()
+        layout.addWidget(tabs, 1)
+
+        for tab_key, file_name, missing_key in [
+            ("about_license_tab", "LICENSE", "about_license_missing"),
+            ("about_third_party_tab", "THIRD_PARTY_NOTICES.md",
+             "about_third_party_missing"),
+        ]:
+            path = self._resource_path(file_name)
+            text = ""
+            if path.exists():
+                try:
+                    text = path.read_text(encoding="utf-8")
+                except Exception:
+                    text = ""
+            if not text:
+                text = tr(missing_key)
+            viewer = QTextBrowser()
+            viewer.setPlainText(text)
+            tabs.addTab(viewer, tr(tab_key))
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        close_btn = QPushButton(tr("about_close"))
+        close_btn.setObjectName("successBtn")
+        close_btn.setMinimumHeight(34)
+        close_btn.clicked.connect(dialog.accept)
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+
+        dialog.exec()
 
     def _update_advanced_btn_text(self):
         state = self.settings_mgr.settings.advanced_open

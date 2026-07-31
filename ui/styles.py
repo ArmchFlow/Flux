@@ -11,6 +11,14 @@ QWidget {
     font-size: 13px;
 }
 
+QTextBrowser {
+    background-color: #181825;
+    color: #cdd6f4;
+    border: none;
+    padding: 8px;
+    selection-background-color: #585b70;
+}
+
 QLabel#flagCell {
     font-family: "Segoe UI Emoji", "Segoe UI Symbol", "Segoe UI", "Arial";
     font-size: 14px;
