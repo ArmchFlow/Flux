@@ -90,6 +90,34 @@ QPushButton#connectBtn[connecting="true"]:disabled {
     border: none;
 }
 
+QDialog#speedResultDialog {
+    background-color: #1e1e2e;
+    border: 1px solid #313244;
+}
+
+QLabel#speedResultTitle {
+    font-size: 18px;
+    font-weight: 600;
+    color: #cdd6f4;
+}
+
+QLabel#speedResultLabel {
+    font-size: 12px;
+    color: #a6adc8;
+}
+
+QLabel#speedResultValueDown {
+    font-size: 30px;
+    font-weight: 700;
+    color: #a6e3a1;
+}
+
+QLabel#speedResultValueUp {
+    font-size: 30px;
+    font-weight: 700;
+    color: #89b4fa;
+}
+
 QPushButton#disconnectBtn {
     background-color: #f38ba8;
     color: #1e1e2e;
