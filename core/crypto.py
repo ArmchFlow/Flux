@@ -13,7 +13,7 @@ from .log_utils import log_call
 logger = logging.getLogger(__name__)
 
 KEY_FILE = "vault.key"
-SALT = b"flux_salt_2026_v1"
+SALT = b"myvpn_salt_2026_v1"
 
 
 def _get_key_path() -> Path:

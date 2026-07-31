@@ -3,9 +3,9 @@
   <assemblyIdentity
     version="1.0.0.0"
     processorArchitecture="amd64"
-    name="Flux"
+    name="MyVPN"
     type="win32"/>
-  <description>Flux - VPN Client</description>
+  <description>MyVPN - VPN Client</description>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges>

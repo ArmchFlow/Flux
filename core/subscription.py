@@ -15,7 +15,7 @@ from .log_utils import log_call, log_api_call, log_api_response, log_servers
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "Flux/1.0 (VPN Client)"
+USER_AGENT = "MyVPN/1.0 (VPN Client)"
 
 
 @dataclass

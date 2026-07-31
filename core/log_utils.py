@@ -59,7 +59,7 @@ def setup_logging(data_dir: Path, level=logging.DEBUG):
     global _log_initialized, _handler
 
     data_dir.mkdir(parents=True, exist_ok=True)
-    log_file = data_dir / "flux.log"
+    log_file = data_dir / "myvpn.log"
 
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
@@ -140,14 +140,6 @@ def _truncate(s: str, n: int) -> str:
     return s if len(s) <= n else s[: n - 3] + "..."
 
 
-def log_exception(logger: logging.Logger, context: str = ""):
-    logger.error(
-        "Exception [%s]: %s\n%s",
-        context,
-        traceback.format_exc().replace("\n", " | "),
-    )
-
-
 def log_api_call(logger: logging.Logger, method: str, url: str, **kwargs):
     safe_url = url.replace("://", "://") if "password" not in url else url
     logger.debug("HTTP %s %s | kwargs=%s", method, safe_url, _truncate(repr(kwargs), 300))
@@ -156,16 +148,6 @@ def log_api_call(logger: logging.Logger, method: str, url: str, **kwargs):
 def log_api_response(logger: logging.Logger, method: str, url: str, status: int, body=None):
     body_str = _truncate(repr(body), 300) if body else ""
     logger.debug("HTTP %s %s → %s | body=%s", method, url, status, body_str)
-
-
-def log_config(logger: logging.Logger, config: dict, label: str = ""):
-    import json
-    try:
-        pretty = json.dumps(config, ensure_ascii=False, indent=2)
-    except Exception:
-        pretty = repr(config)
-    lines = pretty.split("\n")
-    logger.debug("Config %s (%d lines):\n%s", label, len(lines), pretty)
 
 
 def log_servers(logger: logging.Logger, servers: list, label: str = ""):
