@@ -240,9 +240,11 @@ class _ButtonOverlay(QWidget):
 class TrailRingOverlay(_ButtonOverlay):
     MARGIN = 6
 
-    def __init__(self, target: QWidget, color: str = "#ffffff", dots: int = 18):
+    def __init__(self, target: QWidget, color: str = "#ffffff", dots: int = 18,
+                 direction: float = -1.0):
         super().__init__(target, color)
         self._dots = max(6, dots)
+        self._dir = 1.0 if direction > 0 else -1.0
         self._head = 0.0
         self._alpha = 255
         self._fading = False
@@ -268,7 +270,7 @@ class TrailRingOverlay(_ButtonOverlay):
                 self.stop()
                 return
         else:
-            self._head = (self._head - 0.025) % 1.0
+            self._head = (self._head + self._dir * 0.025) % 1.0
         self.update()
 
     def paintEvent(self, event):
@@ -291,6 +293,13 @@ class TrailRingOverlay(_ButtonOverlay):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(self._color.red(), self._color.green(), self._color.blue(), alpha))
             painter.drawEllipse(pt, 2.8 * k, 2.8 * k)
+
+
+class SpeedTrailOverlay(TrailRingOverlay):
+    MARGIN = 4
+
+    def __init__(self, target: QWidget, color: str = "#ffffff", dots: int = 12):
+        super().__init__(target, color, dots, direction=1.0)
 
 
 class PulseHitOverlay(_ButtonOverlay):

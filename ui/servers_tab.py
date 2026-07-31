@@ -12,7 +12,7 @@ from core.subscription import SubscriptionManager
 from core.proxy_parser import ProxyServer
 from core.translations import tr
 from .animations import attach_press_feedback
-from .widgets import EmptyStateWidget, TrailRingOverlay, PulseHitOverlay
+from .widgets import EmptyStateWidget, TrailRingOverlay, PulseHitOverlay, SpeedTrailOverlay
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,7 @@ class ServersTab(QWidget):
         self._connecting = False
         self._comet = None
         self._pulse_hit = None
+        self._speed_comet = None
         self._ping_sort_asc = True
         self._filter_proto = ""
         self._pinned: set[str] = set()
@@ -320,8 +321,13 @@ class ServersTab(QWidget):
         self.speed_test_btn.setEnabled(not testing and self._connected)
         if testing:
             self.speed_test_btn.setText(tr("speed_testing"))
+            if self._speed_comet is None:
+                self._speed_comet = SpeedTrailOverlay(self.speed_test_btn)
+            self._speed_comet.start()
         else:
             self.speed_test_btn.setText(tr("speed_test"))
+            if self._speed_comet is not None:
+                self._speed_comet.stop()
 
     def _on_speed_test(self):
         self.speed_test_requested.emit()
