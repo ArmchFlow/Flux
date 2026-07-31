@@ -7,6 +7,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QTextCursor, QColor
 
 from core.log_utils import SignalEmitter, get_signal_handler
+from core.translations import tr
 
 
 LEVEL_COLORS = {
@@ -138,7 +139,7 @@ class LogTab(QWidget):
 
     def _on_toggle_pause(self, paused: bool):
         self._paused = paused
-        self.pause_btn.setText("Resume" if paused else "Pause")
+        self.pause_btn.setText(tr("resume") if paused else tr("pause"))
 
     def _on_clear(self):
         self.log_view.clear()

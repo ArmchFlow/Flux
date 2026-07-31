@@ -16,7 +16,7 @@ from .settings_tab import SettingsTab
 from .log_tab import LogTab
 from .tray import SystemTray
 from .styles import DARK_STYLE
-from .animations import Animations, ToastManager
+from .animations import ToastManager
 from .widgets import StatusIndicator
 
 from core.subscription import SubscriptionManager
@@ -50,6 +50,7 @@ class MainWindow(QMainWindow):
         self.data_dir = data_dir
         self._connected = False
         self._current_proxy_tag = "auto"
+        self._active_tag = None
         self._connecting = False
         self._vpn_sig = _VpnSignals()
         self._vpn_sig.done.connect(self._on_connect_done)
@@ -80,12 +81,16 @@ class MainWindow(QMainWindow):
         self._tray.quit_requested.connect(self._quit_app)
         self._tray.connect_requested.connect(self._on_connect_from_tray)
         self._tray.disconnect_requested.connect(self._on_disconnect_from_tray)
+        self._tray.quick_connect_requested.connect(self._on_quick_connect)
+        self._tray.recent_selected.connect(self._on_recent_selected)
+        self._tray.menu.aboutToShow.connect(self._refresh_tray_recent)
+        self._last_tag, self._recent = self._load_last_server()
+        self._tray.set_quick_connect_enabled(self._last_tag is not None)
 
         self._setup_ui()
         self._setup_statusbar()
 
         self._toasts = ToastManager.instance(self)
-        self._tabs.currentChanged.connect(self._on_tab_changed)
 
         self._ping_timer = QTimer(self)
         self._ping_timer.timeout.connect(self._auto_refresh_status)
@@ -148,11 +153,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._tabs)
         logger.debug("UI tabs set up: Subscriptions, Servers, Settings, Logs")
 
-    def _on_tab_changed(self, index: int):
-        widget = self._tabs.widget(index)
-        if widget is not None:
-            Animations.fade_in(widget, 200)
-
     def _setup_statusbar(self):
         status = QStatusBar()
         status.setStyleSheet("""
@@ -195,7 +195,7 @@ class MainWindow(QMainWindow):
             item = self._servers_tab.table.item(rows.pop(), 0)
             if item:
                 sel_tag = item.data(Qt.ItemDataRole.UserRole)
-        self._status_text.setText(f" Updating subscription: {url[:60]}...")
+        self._status_text.setText(" " + tr("updating_sub").format(url[:60]))
         try:
             servers = self.sub_manager.update_subscription(url)
             self._sub_tab.refresh_after_update()
@@ -207,7 +207,7 @@ class MainWindow(QMainWindow):
                         self._servers_tab.table.selectRow(r)
                         break
             logger.info("Subscription updated: %d servers from %s", len(servers), url[:60])
-            self._status_text.setText(f" Subscription updated: {len(servers)} servers")
+            self._status_text.setText(" " + tr("sub_updated_count").format(len(servers)))
             self._toasts.show(f"{tr('subscription_updated')}: {len(servers)}", "success", 2500)
         except Exception as e:
             logger.error("Subscription update failed: %s", e, exc_info=True)
@@ -218,13 +218,13 @@ class MainWindow(QMainWindow):
             self._status_text.setText(" " + tr("update_failed"))
 
     def _on_update_all_subs(self, urls: list):
-        self._status_text.setText(" Updating all subscriptions...")
+        self._status_text.setText(" " + tr("updating_all_subs"))
         total = len(urls)
         def _work():
             try:
                 for i, url in enumerate(urls, 1):
                     QTimer.singleShot(0, lambda i=i: self._status_text.setText(
-                        f" Updating subscription {i}/{total}..."))
+                        " " + tr("updating_sub_n_of").format(i, total)))
                     try:
                         self.sub_manager.update_subscription(url)
                     except Exception as e:
@@ -248,22 +248,22 @@ class MainWindow(QMainWindow):
                 if it and it.data(Qt.ItemDataRole.UserRole) == sel_tag:
                     self._servers_tab.table.selectRow(r)
                     break
-        self._status_text.setText(" All subscriptions updated")
+        self._status_text.setText(" " + tr("all_subs_updated"))
         self._toasts.show(tr("subscription_updated"), "success", 2500)
 
     def _on_add_sub(self, url: str, name: str):
         logger.info("UI: add subscription requested: url=%s, name=%s", url[:80], name or "(auto)")
-        self._status_text.setText(f" Fetching subscription: {url[:60]}...")
+        self._status_text.setText(" " + tr("fetching_sub").format(url[:60]))
         try:
             servers = self.sub_manager.update_subscription(url)
             self._sub_tab.refresh_after_update()
             self._servers_tab.load_servers()
             logger.info("Subscription added: %s → %d servers", url[:60], len(servers))
-            self._status_text.setText(f" Subscription added: {len(servers)} servers")
+            self._status_text.setText(" " + tr("sub_added_count").format(len(servers)))
             self._toasts.show(f"{tr('subscription_added')}: {len(servers)}", "success", 2500)
         except Exception as e:
             logger.error("Failed to add subscription: %s", e, exc_info=True)
-            self._status_text.setText(" Fetch failed")
+            self._status_text.setText(" " + tr("fetch_failed"))
             QMessageBox.critical(
                 self, tr("error"),
                 f"{tr('fetch_err_msg')}\n\n{e}",
@@ -275,11 +275,11 @@ class MainWindow(QMainWindow):
             srv = self.sub_manager.import_conf_file(filepath)
             if srv:
                 self._servers_tab.load_servers()
-                self._status_text.setText(f" Imported: {srv.name}")
+                self._status_text.setText(" " + tr("imported_name").format(srv.name))
                 self._toasts.show(tr("config_imported"), "success", 2500)
         except Exception as e:
             logger.error("Import AWG config failed: %s", e, exc_info=True)
-            QMessageBox.critical(self, tr("error"), f"Failed to import config:\n{e}")
+            QMessageBox.critical(self, tr("error"), f"{tr('import_conf_failed')}\n{e}")
 
     def _on_server_selected(self, tag: str):
         logger.info("UI: server selected: %s", tag)
@@ -316,6 +316,7 @@ class MainWindow(QMainWindow):
         self._connecting = True
         self._status_text.setText(" " + tr("connecting"))
         self._set_status_dot("connecting")
+        self._servers_tab.set_connecting(True)
 
         servers = self.sub_manager.get_all_servers()
         logger.info("Servers available for connection: %d", len(servers))
@@ -325,6 +326,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, tr("no_servers_title"), tr("no_servers"))
             self._status_text.setText(" " + tr("no_servers_title"))
             self._connecting = False
+            self._servers_tab.set_connecting(False)
             return
 
         if self.settings_mgr.settings.proxy.auto_select and self._current_proxy_tag == "auto":
@@ -338,7 +340,11 @@ class MainWindow(QMainWindow):
         srv = next((s for s in servers if s.tag == selected_tag), None)
         if not srv:
             self._connecting = False
+            self._servers_tab.set_connecting(False)
             return
+
+        self._active_tag = selected_tag
+        self._status_text.setText(" " + tr("connecting_to").format(srv.display_name))
 
         if srv.protocol == "awg":
             self._start_awg(srv)
@@ -352,6 +358,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, tr("config_error"), str(e))
             self._status_text.setText(" " + tr("config_error"))
             self._connecting = False
+            self._servers_tab.set_connecting(False)
             return
 
         def _work():
@@ -438,9 +445,11 @@ class MainWindow(QMainWindow):
         if not self._connecting:
             return
         self._connecting = False
+        self._servers_tab.set_connecting(False)
         if success:
             self.set_connected(True)
             self._set_status_dot("connected")
+            self._save_last_server(self._active_tag)
             if mode == "AWG":
                 self._status_text.setText(" " + tr("connected_tun") + " (AWG)")
                 self._toasts.show(tr("connected_tun") + " (AWG)", "success", 2500)
@@ -452,12 +461,13 @@ class MainWindow(QMainWindow):
         else:
             logger.error("=== CONNECTION FAILED ===")
             self._set_status_dot("disconnected")
-            QMessageBox.critical(self, tr("connection_failed"), mode or "Could not start.")
+            QMessageBox.critical(self, tr("connection_failed"), mode or tr("could_not_start"))
             self._status_text.setText(" " + tr("connection_failed"))
 
     def _disconnect_vpn(self):
         logger.info("=== DISCONNECTING ===")
         self._connecting = False
+        self._servers_tab.set_connecting(False)
         self.xray_mgr.stop()
         self.set_connected(False)
         self._set_status_dot("disconnected")
@@ -469,18 +479,66 @@ class MainWindow(QMainWindow):
         self._connected = connected
         self._servers_tab.set_connected(connected)
         self._tray.set_connected(connected)
+        self._tray.set_quick_connect_enabled(not connected and self._last_tag is not None)
+
+    def _load_last_server(self):
+        try:
+            import json
+            f = Path(self.data_dir) / "last_server.json"
+            if f.exists():
+                data = json.loads(f.read_text(encoding="utf-8"))
+                return data.get("last"), list(data.get("recent", []))
+        except Exception:
+            pass
+        return None, []
+
+    def _save_last_server(self, tag: str):
+        try:
+            import json
+            recent = [tag] + [t for t in self._recent if t != tag][:4]
+            f = Path(self.data_dir) / "last_server.json"
+            f.write_text(json.dumps({"last": tag, "recent": recent}), encoding="utf-8")
+            self._last_tag = tag
+            self._recent = recent
+            self._tray.set_quick_connect_enabled(not self._connected)
+        except Exception:
+            pass
+
+    def _refresh_tray_recent(self):
+        try:
+            names = {}
+            for s in self.sub_manager.get_all_servers():
+                names[s.tag] = s.display_name
+            recent = [(t, names.get(t, t)) for t in self._recent]
+            self._tray.set_recent_servers(recent)
+        except Exception:
+            pass
+
+    def _on_quick_connect(self):
+        logger.info("Tray: quick connect requested")
+        if self._connected or not self._last_tag:
+            return
+        self._current_proxy_tag = self._last_tag
+        self._connect_vpn()
+
+    def _on_recent_selected(self, tag: str):
+        logger.info("Tray: recent server selected: %s", tag)
+        if self._connected:
+            return
+        self._current_proxy_tag = tag
+        self._connect_vpn()
 
     def _on_ping_servers(self, tag: str):
         logger.info("UI: ping requested: %s", tag)
 
         if tag == "__all__":
             servers = self.sub_manager.get_all_servers()
-            self._status_text.setText(" Testing all servers...")
+            self._status_text.setText(" " + tr("testing_all"))
             logger.info("TCP pinging %d servers...", len(servers))
             delays = self.xray_mgr.tcp_ping_servers(servers, timeout=2.0)
             self._servers_tab.update_delays(delays)
             ok = sum(1 for v in delays.values() if v >= 0)
-            self._status_text.setText(f" Ping complete: {ok}/{len(delays)} responded")
+            self._status_text.setText(" " + tr("ping_complete_count").format(ok, len(delays)))
             logger.info("Ping all: %d/%d responded", ok, len(delays))
         else:
             servers = self.sub_manager.get_all_servers()
@@ -488,7 +546,7 @@ class MainWindow(QMainWindow):
             if srv:
                 delay = self.xray_mgr.tcp_ping(srv.server, srv.port)
                 self._servers_tab.update_delays({tag: delay})
-                status = f"{delay} ms" if delay >= 0 else "timeout"
+                status = f"{delay} {tr('ping_ms')}" if delay >= 0 else tr("timeout")
                 self._status_text.setText(f" {tag}: {status}")
                 logger.info("Ping %s: %s", tag, status)
 
@@ -497,8 +555,7 @@ class MainWindow(QMainWindow):
         if self._connected:
             logger.info("VPN is connected, asking about restart...")
             reply = QMessageBox.question(
-                self, "Restart Required",
-                "Settings changed. Restart VPN to apply?",
+                self, tr("restart_required"), tr("restart_msg"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.Yes:
@@ -514,7 +571,7 @@ class MainWindow(QMainWindow):
                 logger.warning("Connection lost")
                 self.set_connected(False)
                 self._set_status_dot("disconnected")
-                self._status_text.setText(" Connection lost")
+                self._status_text.setText(" " + tr("connection_lost"))
                 self._toasts.show(tr("connection_lost"), "error", 3000)
         except Exception:
             pass

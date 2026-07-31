@@ -15,7 +15,7 @@ from core.crypto import get_or_create_vault
 from core.subscription import SubscriptionManager
 from core.settings_manager import SettingsManager
 from core.dual_mgr import DualManager
-from core.translations import set_language
+from core.translations import set_language, tr
 from ui.main_window import MainWindow
 
 
@@ -129,8 +129,11 @@ def main():
         if _send_show_to_running():
             return
         _fallback_app = QApplication(sys.argv)
-        QMessageBox.information(None, "Flux",
-            "Application is already running.\nCannot find the running window.")
+        try:
+            set_language(SettingsManager(get_data_dir()).settings.language)
+        except Exception:
+            pass
+        QMessageBox.information(None, "Flux", tr("already_running"))
         _fallback_app.quit()
         return
 
@@ -184,8 +187,8 @@ def main():
         if not path.exists():
             missing.append(name)
     if missing:
-        QMessageBox.warning(None, "Missing binaries",
-                           "Not found: " + ", ".join(missing))
+        QMessageBox.warning(None, tr("missing_binaries"),
+                           tr("not_found") + ", ".join(missing))
 
     dual_mgr = DualManager(sb_path, xr_path, data_dir)
 

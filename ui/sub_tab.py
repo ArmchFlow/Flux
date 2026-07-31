@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QFileDialog
 
 from core.subscription import SubscriptionManager, Subscription
 from core.translations import tr
-from .animations import Animations, attach_press_feedback
+from .animations import attach_press_feedback
 from .widgets import EmptyStateWidget
 
 logger = logging.getLogger(__name__)
@@ -154,10 +154,7 @@ class SubscriptionTab(QWidget):
         if self.table.rowCount() == 0:
             self._stack.setCurrentWidget(self._empty_state)
         else:
-            was_empty = self._stack.currentWidget() is not self.table
             self._stack.setCurrentWidget(self.table)
-            if was_empty:
-                Animations.fade_in(self.table, 200)
 
     def _on_add(self):
         url = self.url_input.text().strip()
@@ -176,7 +173,7 @@ class SubscriptionTab(QWidget):
             self._load_data()
         except Exception as e:
             logger.error("Failed to add subscription via UI: %s", e, exc_info=True)
-            QMessageBox.critical(self, "Error", f"Failed to add subscription:\n{e}")
+            QMessageBox.critical(self, tr("error"), f"{tr('add_sub_failed')}\n{e}")
 
     def _on_update_all(self):
         urls = [sub.url for sub in self.sub_manager.subscriptions
@@ -208,7 +205,7 @@ class SubscriptionTab(QWidget):
 
     def _on_import_conf(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import AmneziaWG Config", "", "Config files (*.conf);;All files (*)")
+            self, tr("import_conf_title"), "", tr("conf_filter"))
         if path:
             self.conf_imported.emit(path)
 

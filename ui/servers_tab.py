@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from pathlib import Path
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QColor
 
 from core.subscription import SubscriptionManager
 from core.proxy_parser import ProxyServer
@@ -36,6 +36,8 @@ class ServersTab(QWidget):
         self._rows: list[ProxyServer] = []
         self._delays: dict[str, int] = {}
         self._connected = False
+        self._connecting = False
+        self._pulse = None
         self._ping_sort_asc = True
         self._filter_proto = ""
         self._pinned: set[str] = set()
@@ -203,6 +205,13 @@ class ServersTab(QWidget):
             pi = self.table.item(row, _COL_PING)
             if pi:
                 pi.setFlags(pi.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                if d >= 0:
+                    if d < 100:
+                        pi.setForeground(QColor("#a6e3a1"))
+                    elif d < 300:
+                        pi.setForeground(QColor("#f9e2af"))
+                    else:
+                        pi.setForeground(QColor("#f38ba8"))
             si = QTableWidgetItem(srv.subscription_tag)
             si.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             si.setFlags(si.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -218,10 +227,7 @@ class ServersTab(QWidget):
         if count == 0:
             self._stack.setCurrentWidget(self._empty_state)
         else:
-            was_empty = self._stack.currentWidget() is not self.table
             self._stack.setCurrentWidget(self.table)
-            if was_empty:
-                Animations.fade_in(self.table, 200)
 
     def update_delays(self, delays: dict[str, int]):
         self._delays.update(delays)
@@ -235,6 +241,18 @@ class ServersTab(QWidget):
         else:
             self.connect_btn.show()
             self.disconnect_btn.hide()
+
+    def set_connecting(self, connecting: bool):
+        if connecting:
+            self.connect_btn.setText(tr("connecting"))
+            self.connect_btn.setEnabled(False)
+            self._pulse = Animations.pulse(self.connect_btn, "#a6e3a1", 900, 0)
+        else:
+            self.connect_btn.setText(tr("connect"))
+            self.connect_btn.setEnabled(True)
+            if self._pulse is not None:
+                self._pulse.stop()
+                self._pulse = None
 
     def _selected_tag(self):
         r = {idx.row() for idx in self.table.selectedIndexes()}

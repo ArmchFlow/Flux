@@ -7,10 +7,26 @@ from PyQt6.QtGui import QColor, QPainter, QPainterPath
 from typing import Optional, Callable
 import math
 
+_active_fades: dict[int, QPropertyAnimation] = {}
+
+
+def _stop_active_fade(widget: QWidget):
+    anim = _active_fades.pop(id(widget), None)
+    if anim is not None:
+        try:
+            anim.stop()
+        except RuntimeError:
+            pass
+        try:
+            widget.setGraphicsEffect(None)
+        except RuntimeError:
+            pass
+
 
 class Animations:
     @staticmethod
     def fade_in(widget: QWidget, duration: int = 150, callback: Optional[Callable] = None) -> QPropertyAnimation:
+        _stop_active_fade(widget)
         effect = QGraphicsOpacityEffect(widget)
         widget.setGraphicsEffect(effect)
         effect.setOpacity(0.0)
@@ -22,16 +38,23 @@ class Animations:
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
 
         def cleanup():
-            widget.setGraphicsEffect(None)
+            if _active_fades.get(id(widget)) is anim:
+                _active_fades.pop(id(widget), None)
+            try:
+                widget.setGraphicsEffect(None)
+            except RuntimeError:
+                pass
             if callback:
                 callback()
 
+        _active_fades[id(widget)] = anim
         anim.finished.connect(cleanup)
         anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
         return anim
 
     @staticmethod
     def fade_out(widget: QWidget, duration: int = 150, callback: Optional[Callable] = None) -> QPropertyAnimation:
+        _stop_active_fade(widget)
         effect = QGraphicsOpacityEffect(widget)
         widget.setGraphicsEffect(effect)
         effect.setOpacity(1.0)
@@ -43,10 +66,16 @@ class Animations:
         anim.setEasingCurve(QEasingCurve.Type.InCubic)
 
         def cleanup():
-            widget.setGraphicsEffect(None)
+            if _active_fades.get(id(widget)) is anim:
+                _active_fades.pop(id(widget), None)
+            try:
+                widget.setGraphicsEffect(None)
+            except RuntimeError:
+                pass
             if callback:
                 callback()
 
+        _active_fades[id(widget)] = anim
         anim.finished.connect(cleanup)
         anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
         return anim
