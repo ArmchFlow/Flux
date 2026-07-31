@@ -155,6 +155,10 @@ class SettingsTab(QWidget):
         self.auto_connect.toggled.connect(self._on_setting_changed)
         ui_layout.addRow(self.auto_connect)
 
+        self.auto_reconnect = QCheckBox(tr("auto_reconnect"))
+        self.auto_reconnect.toggled.connect(self._on_setting_changed)
+        ui_layout.addRow(self.auto_reconnect)
+
         self.language_cb = QComboBox()
         self.language_cb.addItem("English", "en")
         self.language_cb.addItem("Русский", "ru")
@@ -209,6 +213,7 @@ class SettingsTab(QWidget):
         self.minimize_to_tray.setChecked(s.minimize_to_tray)
         self.start_minimized.setChecked(s.start_minimized)
         self.auto_connect.setChecked(s.auto_connect)
+        self.auto_reconnect.setChecked(s.auto_reconnect)
         l_idx = self.language_cb.findData(s.language)
         if l_idx >= 0:
             self.language_cb.setCurrentIndex(l_idx)
@@ -245,6 +250,7 @@ class SettingsTab(QWidget):
         s.minimize_to_tray = self.minimize_to_tray.isChecked()
         s.start_minimized = self.start_minimized.isChecked()
         s.auto_connect = self.auto_connect.isChecked()
+        s.auto_reconnect = self.auto_reconnect.isChecked()
         s.language = self.language_cb.currentData() or "ru"
         s.proxy.auto_select = self.auto_select.currentIndex() == 1
         set_language(s.language)

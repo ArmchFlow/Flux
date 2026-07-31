@@ -5,14 +5,14 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QMenu, QStackedWidget,
 )
 from pathlib import Path
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QAction, QColor
 
 from core.subscription import SubscriptionManager
 from core.proxy_parser import ProxyServer
 from core.translations import tr
-from .animations import Animations, attach_press_feedback
-from .widgets import EmptyStateWidget
+from .animations import attach_press_feedback
+from .widgets import EmptyStateWidget, TrailRingOverlay, PulseHitOverlay
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ class ServersTab(QWidget):
     connect_requested = pyqtSignal(str)
     disconnect_requested = pyqtSignal()
     ping_requested = pyqtSignal(str)
+    speed_test_requested = pyqtSignal()
 
     def __init__(self, sub_manager: SubscriptionManager, parent=None):
         super().__init__(parent)
@@ -37,7 +38,8 @@ class ServersTab(QWidget):
         self._delays: dict[str, int] = {}
         self._connected = False
         self._connecting = False
-        self._pulse = None
+        self._comet = None
+        self._pulse_hit = None
         self._ping_sort_asc = True
         self._filter_proto = ""
         self._pinned: set[str] = set()
@@ -113,6 +115,14 @@ class ServersTab(QWidget):
         ping_all_btn.clicked.connect(self._on_ping_all)
         attach_press_feedback(ping_all_btn)
         btn_row.addWidget(ping_all_btn)
+
+        self.speed_test_btn = QPushButton(tr("speed_test"))
+        self.speed_test_btn.setMinimumHeight(30)
+        self.speed_test_btn.setToolTip(tr("speed_test_note"))
+        self.speed_test_btn.setEnabled(False)
+        self.speed_test_btn.clicked.connect(self._on_speed_test)
+        attach_press_feedback(self.speed_test_btn)
+        btn_row.addWidget(self.speed_test_btn)
 
         btn_row.addStretch()
         vbox.addLayout(btn_row)
@@ -233,26 +243,52 @@ class ServersTab(QWidget):
         self._delays.update(delays)
         self._render_table(self._servers, self.search_input.text())
 
+    def _repolish_connect_btn(self):
+        self.connect_btn.style().unpolish(self.connect_btn)
+        self.connect_btn.style().polish(self.connect_btn)
+
     def set_connected(self, connected: bool):
         self._connected = connected
+        self.speed_test_btn.setEnabled(connected)
+        self.speed_test_btn.setToolTip(
+            "" if connected else tr("speed_test_note"))
         if connected:
-            self.connect_btn.hide()
-            self.disconnect_btn.show()
+            if self._comet is not None:
+                self._comet.fade_out(250)
+            if self._pulse_hit is None:
+                self._pulse_hit = PulseHitOverlay(self.connect_btn)
+            self._pulse_hit.play()
+            QTimer.singleShot(260, self._swap_to_disconnect)
         else:
+            if self._comet is not None:
+                self._comet.stop()
+            if self._pulse_hit is not None:
+                self._pulse_hit.stop()
             self.connect_btn.show()
             self.disconnect_btn.hide()
+
+    def _swap_to_disconnect(self):
+        if not self._connected:
+            return
+        self.connect_btn.hide()
+        self.disconnect_btn.show()
 
     def set_connecting(self, connecting: bool):
         if connecting:
             self.connect_btn.setText(tr("connecting"))
             self.connect_btn.setEnabled(False)
-            self._pulse = Animations.pulse(self.connect_btn, "#a6e3a1", 900, 0)
+            self.connect_btn.setProperty("connecting", True)
+            self._repolish_connect_btn()
+            if self._comet is None:
+                self._comet = TrailRingOverlay(self.connect_btn)
+            self._comet.start()
         else:
             self.connect_btn.setText(tr("connect"))
             self.connect_btn.setEnabled(True)
-            if self._pulse is not None:
-                self._pulse.stop()
-                self._pulse = None
+            self.connect_btn.setProperty("connecting", False)
+            self._repolish_connect_btn()
+            if self._comet is not None:
+                self._comet.stop()
 
     def _selected_tag(self):
         r = {idx.row() for idx in self.table.selectedIndexes()}
@@ -279,6 +315,16 @@ class ServersTab(QWidget):
 
     def _on_ping_all(self):
         self.ping_requested.emit("__all__")
+
+    def set_speed_testing(self, testing: bool):
+        self.speed_test_btn.setEnabled(not testing and self._connected)
+        if testing:
+            self.speed_test_btn.setText(tr("speed_testing"))
+        else:
+            self.speed_test_btn.setText(tr("speed_test"))
+
+    def _on_speed_test(self):
+        self.speed_test_requested.emit()
 
     def _on_ping_server(self, tag: str):
         self.ping_requested.emit(tag)

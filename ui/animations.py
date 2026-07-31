@@ -170,13 +170,15 @@ class PulseAnimation(QObject):
                 self.finished.emit()
                 return
 
-        alpha = int(255 * (1.0 - abs(math.sin(self._progress * math.pi))))
+        wave = abs(math.sin(self._progress * math.pi))
+        alpha = int(100 + 155 * wave)
+        width = int(2 + 2 * wave)
         try:
             r = int(self._color[1:3], 16)
             g = int(self._color[3:5], 16)
             b = int(self._color[5:7], 16)
             self._widget.setStyleSheet(
-                f"{self._original_style}; border: 2px solid rgba({r},{g},{b},{alpha});"
+                f"{self._original_style}; border: {width}px solid rgba({r},{g},{b},{alpha});"
             )
         except RuntimeError:
             self.stop()

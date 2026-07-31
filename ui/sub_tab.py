@@ -21,6 +21,8 @@ class SubscriptionTab(QWidget):
     batch_update_requested = pyqtSignal(list)
     add_requested = pyqtSignal(str, str)
     conf_imported = pyqtSignal(str)
+    export_requested = pyqtSignal(str)
+    import_requested = pyqtSignal(str)
 
     def __init__(self, sub_manager: SubscriptionManager, parent=None):
         super().__init__(parent)
@@ -74,6 +76,16 @@ class SubscriptionTab(QWidget):
         update_all_btn.clicked.connect(self._on_update_all)
         attach_press_feedback(update_all_btn)
         btn_layout.addWidget(update_all_btn)
+
+        export_btn = QPushButton(tr("export_subs"))
+        export_btn.clicked.connect(self._on_export)
+        attach_press_feedback(export_btn)
+        btn_layout.addWidget(export_btn)
+
+        import_btn = QPushButton(tr("import_subs"))
+        import_btn.clicked.connect(self._on_import)
+        attach_press_feedback(import_btn)
+        btn_layout.addWidget(import_btn)
 
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
@@ -208,6 +220,19 @@ class SubscriptionTab(QWidget):
             self, tr("import_conf_title"), "", tr("conf_filter"))
         if path:
             self.conf_imported.emit(path)
+
+    def _on_export(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr("export_subs"), "flux_subscriptions.json",
+            tr("backup_file_filter"))
+        if path:
+            self.export_requested.emit(path)
+
+    def _on_import(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("import_subs"), "", tr("backup_file_filter"))
+        if path:
+            self.import_requested.emit(path)
 
     def _on_context_menu(self, pos):
         item = self.table.itemAt(pos)

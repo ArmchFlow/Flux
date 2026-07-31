@@ -1,5 +1,5 @@
-from PyQt6.QtCore import Qt, QTimer, QRectF
-from PyQt6.QtGui import QColor, QPainter, QRadialGradient
+from PyQt6.QtCore import Qt, QTimer, QRectF, QEvent, QPoint
+from PyQt6.QtGui import QColor, QPainter, QRadialGradient, QPainterPath, QPen
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
 from typing import Optional, Callable
 
@@ -135,3 +135,151 @@ class _EmptyIcon(QWidget):
         y = h // 2 - bar_h
         for i in range(3):
             painter.drawRoundedRect(6, y + i * 8, bar_w, bar_h, 2, 2)
+
+
+class _ButtonOverlay(QWidget):
+    MARGIN = 0
+
+    def __init__(self, target: QWidget, color: str = "#1e1e2e"):
+        parent = target.parentWidget() or target.window()
+        super().__init__(parent)
+        self._target = target
+        self._color = QColor(color)
+        self._running = False
+        self._timer = QTimer(self)
+        self._timer.setInterval(25)
+        self._timer.timeout.connect(self._tick)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        target.installEventFilter(self)
+        self._sync_geometry()
+        self.hide()
+
+    def _sync_geometry(self):
+        m = self.MARGIN
+        tl = self._target.mapTo(self.parentWidget(), QPoint(0, 0))
+        self.setGeometry(tl.x() - m, tl.y() - m,
+                         self._target.width() + 2 * m, self._target.height() + 2 * m)
+
+    def eventFilter(self, obj, event):
+        if obj is self._target:
+            t = event.type()
+            if t in (QEvent.Type.Resize, QEvent.Type.Move):
+                self._sync_geometry()
+            elif t == QEvent.Type.Hide:
+                self._timer.stop()
+                self.hide()
+            elif t == QEvent.Type.Show and self._running:
+                self._sync_geometry()
+                self.show()
+                self._timer.start()
+        return super().eventFilter(obj, event)
+
+    def start(self):
+        self._running = True
+        self._sync_geometry()
+        self.show()
+        self._timer.start()
+
+    def stop(self):
+        self._running = False
+        self._timer.stop()
+        self.hide()
+
+    def _tick(self):
+        self.update()
+
+
+class TrailRingOverlay(_ButtonOverlay):
+    MARGIN = 6
+
+    def __init__(self, target: QWidget, color: str = "#ffffff", dots: int = 18):
+        super().__init__(target, color)
+        self._dots = max(6, dots)
+        self._head = 0.0
+        self._alpha = 255
+        self._fading = False
+        self._fade_step = 0.0
+
+    def start(self):
+        self._head = 0.0
+        self._alpha = 255
+        self._fading = False
+        super().start()
+
+    def fade_out(self, duration_ms: int = 250):
+        if not self._running:
+            return
+        self._fading = True
+        self._fade_step = 255.0 * 25 / max(1, duration_ms)
+        self._timer.start()
+
+    def _tick(self):
+        if self._fading:
+            self._alpha -= self._fade_step
+            if self._alpha <= 0:
+                self.stop()
+                return
+        else:
+            self._head = (self._head - 0.025) % 1.0
+        self.update()
+
+    def paintEvent(self, event):
+        if self._alpha <= 0:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(self.rect()).adjusted(2.0, 2.0, -2.0, -2.0), 9, 9)
+
+        n = self._dots
+        for i in range(n):
+            t = (self._head + i * (0.5 / n)) % 1.0
+            pt = path.pointAtPercent(t)
+            k = 1.0 - i / n
+            alpha = int(self._alpha * k * k)
+            if alpha <= 0:
+                continue
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(self._color.red(), self._color.green(), self._color.blue(), alpha))
+            painter.drawEllipse(pt, 2.8 * k, 2.8 * k)
+
+
+class PulseHitOverlay(_ButtonOverlay):
+    def __init__(self, target: QWidget, color: str = "#1e1e2e"):
+        super().__init__(target, color)
+        self._progress = 0.0
+
+    def play(self):
+        self._progress = 0.0
+        self.start()
+
+    def _tick(self):
+        self._progress += 25 / 450.0
+        if self._progress >= 1.0:
+            self.stop()
+            return
+        self.update()
+
+    def paintEvent(self, event):
+        if self._progress >= 1.0:
+            return
+        k = self._progress
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(self.rect()).adjusted(2.5, 2.5, -2.5, -2.5), 8, 8)
+
+        center = QRectF(self.rect()).center()
+        scale = 1.0 + 0.06 * k
+        painter.translate(center)
+        painter.scale(scale, scale)
+        painter.translate(-center)
+
+        pen = QPen(QColor(self._color.red(), self._color.green(), self._color.blue(),
+                          int(220 * (1.0 - k) ** 1.3)), 2.5 + 2.5 * k)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(path)

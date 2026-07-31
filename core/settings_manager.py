@@ -62,6 +62,7 @@ class AppSettings:
     minimize_to_tray: bool = True
     start_minimized: bool = False
     auto_connect: bool = False
+    auto_reconnect: bool = False
     language: str = "ru"
 
 
@@ -108,7 +109,7 @@ class SettingsManager:
         if "log" in data:
             self.settings.log = LogSettings(**data["log"])
 
-        for key in ["dark_theme", "minimize_to_tray", "start_minimized", "auto_connect", "language"]:
+        for key in ["dark_theme", "minimize_to_tray", "start_minimized", "auto_connect", "auto_reconnect", "language"]:
             if key in data:
                 setattr(self.settings, key, data[key])
                 logger.debug("Setting %s = %s", key, data[key])
@@ -129,6 +130,7 @@ class SettingsManager:
             "minimize_to_tray": self.settings.minimize_to_tray,
             "start_minimized": self.settings.start_minimized,
             "auto_connect": self.settings.auto_connect,
+            "auto_reconnect": self.settings.auto_reconnect,
             "language": self.settings.language,
         }
         self.settings_file.write_text(

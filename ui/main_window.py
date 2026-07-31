@@ -1,7 +1,9 @@
+import json
 import logging
 import sys
 import threading
 import subprocess
+import time
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QTabWidget,
@@ -23,14 +25,25 @@ from core.subscription import SubscriptionManager
 from core.settings_manager import SettingsManager
 from core.dual_mgr import DualManager
 from core.config_builder import build_xray_proxy_config
+from core.traffic_monitor import TrafficMonitor
 from core.translations import tr
 from cryptography.fernet import Fernet
 
 logger = logging.getLogger(__name__)
 
+_DOWNLOAD_TEST_URL = "https://speed.cloudflare.com/__down?bytes=15728640"
+_UPLOAD_TEST_URL = "https://speed.cloudflare.com/__up"
+_UPLOAD_TEST_BYTES = 10 * 1024 * 1024
+_RECONNECT_MAX_ATTEMPTS = 3
+_RECONNECT_DELAY_MS = 3000
+
 
 class _VpnSignals(QObject):
     done = pyqtSignal(bool, str, int)
+
+
+class _SpeedSignals(QObject):
+    done = pyqtSignal(bool, str)
 
 
 class MainWindow(QMainWindow):
@@ -52,8 +65,13 @@ class MainWindow(QMainWindow):
         self._current_proxy_tag = "auto"
         self._active_tag = None
         self._connecting = False
+        self._reconnect_attempts = 0
+        self._auto_reconnecting = False
         self._vpn_sig = _VpnSignals()
         self._vpn_sig.done.connect(self._on_connect_done)
+        self._speed_sig = _SpeedSignals()
+        self._speed_sig.done.connect(self._on_speed_done)
+        self._traffic = TrafficMonitor()
 
         if sys.platform == "win32":
             import ctypes
@@ -96,6 +114,10 @@ class MainWindow(QMainWindow):
         self._ping_timer.timeout.connect(self._auto_refresh_status)
         self._ping_timer.start(10000)
 
+        self._traffic_timer = QTimer(self)
+        self._traffic_timer.timeout.connect(self._update_traffic)
+        self._traffic_timer.start(1000)
+
         self._servers_tab.load_servers()
         self._on_ping_servers("__all__")
         self.set_connected(False)
@@ -134,6 +156,7 @@ class MainWindow(QMainWindow):
         self._servers_tab.connect_requested.connect(self._on_server_selected)
         self._servers_tab.disconnect_requested.connect(self._on_disconnect)
         self._servers_tab.ping_requested.connect(self._on_ping_servers)
+        self._servers_tab.speed_test_requested.connect(self._on_speed_test)
         self._tabs.addTab(self._servers_tab, tr("tab_servers"))
 
         self._sub_tab = SubscriptionTab(self.sub_manager)
@@ -141,6 +164,8 @@ class MainWindow(QMainWindow):
         self._sub_tab.batch_update_requested.connect(self._on_update_all_subs)
         self._sub_tab.add_requested.connect(self._on_add_sub)
         self._sub_tab.conf_imported.connect(self._on_conf_imported)
+        self._sub_tab.export_requested.connect(self._on_export_subs)
+        self._sub_tab.import_requested.connect(self._on_import_subs)
         self._tabs.addTab(self._sub_tab, tr("tab_subscriptions"))
 
         self._settings_tab = SettingsTab(self.settings_mgr)
@@ -308,11 +333,13 @@ class MainWindow(QMainWindow):
         logger.info("Tray: disconnect requested")
         self._disconnect_vpn()
 
-    def _connect_vpn(self):
+    def _connect_vpn(self, *, auto: bool = False):
         logger.info("=== CONNECTING VPN ===")
         if self._connecting:
             logger.info("Already connecting, skipping")
             return
+        if not auto:
+            self._reconnect_attempts = 0
         self._connecting = True
         self._status_text.setText(" " + tr("connecting"))
         self._set_status_dot("connecting")
@@ -447,8 +474,11 @@ class MainWindow(QMainWindow):
         self._connecting = False
         self._servers_tab.set_connecting(False)
         if success:
+            self._reconnect_attempts = 0
+            self._auto_reconnecting = False
             self.set_connected(True)
             self._set_status_dot("connected")
+            self._traffic.start()
             self._save_last_server(self._active_tag)
             if mode == "AWG":
                 self._status_text.setText(" " + tr("connected_tun") + " (AWG)")
@@ -467,6 +497,9 @@ class MainWindow(QMainWindow):
     def _disconnect_vpn(self):
         logger.info("=== DISCONNECTING ===")
         self._connecting = False
+        self._auto_reconnecting = False
+        self._reconnect_attempts = 0
+        self._traffic.stop()
         self._servers_tab.set_connecting(False)
         self.xray_mgr.stop()
         self.set_connected(False)
@@ -570,11 +603,118 @@ class MainWindow(QMainWindow):
             if self._connected and not self.xray_mgr.is_running:
                 logger.warning("Connection lost")
                 self.set_connected(False)
+                self._traffic.stop()
                 self._set_status_dot("disconnected")
                 self._status_text.setText(" " + tr("connection_lost"))
                 self._toasts.show(tr("connection_lost"), "error", 3000)
+                if (self.settings_mgr.settings.auto_reconnect
+                        and self._last_tag):
+                    self._try_reconnect()
         except Exception:
             pass
+
+    def _try_reconnect(self):
+        if self._reconnect_attempts >= _RECONNECT_MAX_ATTEMPTS:
+            logger.warning("Auto-reconnect exhausted all attempts")
+            self._reconnect_attempts = 0
+            self._status_text.setText(" " + tr("reconnect_failed"))
+            self._toasts.show(tr("reconnect_failed"), "error", 3000)
+            return
+        self._reconnect_attempts += 1
+        logger.info("Auto-reconnect attempt %d/%d",
+                    self._reconnect_attempts, _RECONNECT_MAX_ATTEMPTS)
+        self._status_text.setText(" " + tr("reconnecting").format(
+            self._reconnect_attempts, _RECONNECT_MAX_ATTEMPTS))
+        self._toasts.show(tr("reconnecting").format(
+            self._reconnect_attempts, _RECONNECT_MAX_ATTEMPTS), "info", 2000)
+        QTimer.singleShot(_RECONNECT_DELAY_MS, self._do_reconnect)
+
+    def _do_reconnect(self):
+        if self._connected or self._connecting:
+            self._reconnect_attempts = 0
+            return
+        self._auto_reconnecting = True
+        self._current_proxy_tag = self._last_tag
+        self._connect_vpn(auto=True)
+
+    def _update_traffic(self):
+        up, down, total_up, total_down, secs = self._traffic.snapshot()
+        if not self._traffic.is_running:
+            self._traffic_label.setText("")
+            return
+        speed_up = f"{_format_bytes(up)}/s"
+        speed_down = f"{_format_bytes(down)}/s"
+        text = tr("traffic_label").format(
+            speed_down, speed_up,
+            _format_bytes(total_down), _format_bytes(total_up),
+            _format_uptime(secs),
+        )
+        self._traffic_label.setText(text)
+
+    def _on_speed_test(self):
+        logger.info("Speed test requested")
+        if not self._connected:
+            self._toasts.show(tr("speed_test_note"), "warning", 2000)
+            return
+        self._servers_tab.set_speed_testing(True)
+        self._status_text.setText(" " + tr("speed_testing"))
+
+        def _work():
+            try:
+                down = _measure_download()
+                up = _measure_upload()
+                self._speed_sig.done.emit(
+                    True, tr("speed_result").format(
+                        f"{down:.2f}", f"{up:.2f}"))
+            except Exception as e:
+                logger.error("Speed test failed: %s", e)
+                self._speed_sig.done.emit(False, tr("speed_timeout"))
+
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _on_speed_done(self, success: bool, msg: str):
+        self._servers_tab.set_speed_testing(False)
+        self._status_text.setText(" " + msg)
+        if success:
+            self._toasts.show(msg, "success", 4000)
+        else:
+            self._toasts.show(msg, "error", 3000)
+
+    def _on_export_subs(self, path: str):
+        logger.info("Exporting subscriptions backup to %s", path)
+        try:
+            data = [s.to_dict() for s in self.sub_manager.subscriptions]
+            Path(path).write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            self._toasts.show(tr("exported_ok"), "success", 2500)
+        except Exception as e:
+            logger.error("Export failed: %s", e, exc_info=True)
+            QMessageBox.critical(self, tr("error"), f"{tr('export_failed')}\n{e}")
+
+    def _on_import_subs(self, path: str):
+        logger.info("Importing subscriptions from %s", path)
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            if not isinstance(data, list):
+                raise ValueError("Bad backup format")
+            existing = {s.url for s in self.sub_manager.subscriptions}
+            added = 0
+            for item in data:
+                url = item.get("url") if isinstance(item, dict) else None
+                if not url or url in existing:
+                    continue
+                self.sub_manager.add_subscription(url, item.get("name") or "")
+                existing.add(url)
+                added += 1
+            self._sub_tab.refresh_after_update()
+            self._servers_tab.load_servers()
+            self._toasts.show(
+                tr("imported_ok_count").format(added), "success", 2500)
+        except Exception as e:
+            logger.error("Import failed: %s", e, exc_info=True)
+            QMessageBox.critical(self, tr("error"), f"{tr('import_failed')}\n{e}")
 
     def _show_from_tray(self):
         logger.debug("Restoring window from tray")
@@ -604,6 +744,7 @@ class MainWindow(QMainWindow):
         logger.info("=" * 50)
         logger.info("Stopping xray...")
         self.xray_mgr.stop()
+        self._traffic.stop()
         logger.info("Saving final log...")
         self._save_final_log()
         logger.info("Hiding tray...")
@@ -631,3 +772,47 @@ def _format_bytes(n: int) -> str:
         return f"{n / (1024 * 1024):.1f} MB"
     else:
         return f"{n / (1024 * 1024 * 1024):.2f} GB"
+
+
+def _format_uptime(secs: int) -> str:
+    if secs <= 0:
+        return "00:00:00"
+    h, rem = divmod(secs, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def _measure_download(timeout: float = 45.0) -> float:
+    import urllib.request
+    start = time.perf_counter()
+    size = 0
+    req = urllib.request.Request(
+        _DOWNLOAD_TEST_URL, headers={"User-Agent": "Flux/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        while True:
+            chunk = r.read(65536)
+            if not chunk:
+                break
+            size += len(chunk)
+    dt = time.perf_counter() - start
+    if dt <= 0:
+        return 0.0
+    return size / 1024 / 1024 / dt
+
+
+def _measure_upload(timeout: float = 45.0) -> float:
+    import urllib.request
+    payload = b"x" * _UPLOAD_TEST_BYTES
+    req = urllib.request.Request(
+        _UPLOAD_TEST_URL, data=payload, method="POST",
+        headers={
+            "User-Agent": "Flux/1.0",
+            "Content-Type": "application/octet-stream",
+        })
+    start = time.perf_counter()
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        r.read()
+    dt = time.perf_counter() - start
+    if dt <= 0:
+        return 0.0
+    return _UPLOAD_TEST_BYTES / 1024 / 1024 / dt

@@ -83,6 +83,13 @@ QPushButton#connectBtn:hover {
     background-color: #94e2d5;
 }
 
+QPushButton#connectBtn[connecting="true"],
+QPushButton#connectBtn[connecting="true"]:disabled {
+    background-color: #a6e3a1;
+    color: #1e1e2e;
+    border: none;
+}
+
 QPushButton#disconnectBtn {
     background-color: #f38ba8;
     color: #1e1e2e;
