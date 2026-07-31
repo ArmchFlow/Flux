@@ -359,9 +359,6 @@ def _first(params: dict, key: str, default: str = "") -> str:
 
 
 def parse_subscription_data(data: str) -> list[ProxyServer]:
-    if data.startswith("proxies:"):
-        return _parse_clash_yaml(data)
-
     try:
         decoded = base64.b64decode(data + "===").decode("utf-8", errors="replace")
     except Exception:
@@ -375,78 +372,6 @@ def parse_subscription_data(data: str) -> list[ProxyServer]:
         srv = parse_proxy_uri(line)
         if srv:
             servers.append(srv)
-
-    return servers
-
-
-def _parse_clash_yaml(data: str) -> list[ProxyServer]:
-    try:
-        import yaml
-    except ImportError:
-        return []
-
-    try:
-        config = yaml.safe_load(data)
-    except Exception:
-        return []
-
-    servers = []
-    proxies = config.get("proxies", [])
-
-    for p in proxies:
-        ptype = p.get("type", "").lower()
-
-        s = ProxyServer(protocol=ptype)
-        s.name = p.get("name", "")
-        s.server = p.get("server", "")
-        try:
-            s.port = int(p.get("port", 443))
-        except (ValueError, TypeError):
-            s.port = 443
-
-        if ptype == "vmess":
-            s.uuid = p.get("uuid", "")
-            s.encryption = p.get("cipher", "auto")
-            s.network = p.get("network", "tcp")
-            s.security = p.get("tls", False)
-            if isinstance(s.security, bool):
-                s.security = "tls" if s.security else "none"
-            s.sni = p.get("servername", "") or s.server
-            s.fingerprint = p.get("client-fingerprint", "")
-            s.alpn = ",".join(p.get("alpn", [])) if isinstance(p.get("alpn"), list) else p.get("alpn", "")
-            s.ws_path = p.get("ws-opts", {}).get("path", "") if isinstance(p.get("ws-opts"), dict) else ""
-            s.ws_host = p.get("ws-opts", {}).get("headers", {}).get("Host", "") if isinstance(p.get("ws-opts"), dict) else ""
-            s.grpc_service = p.get("grpc-opts", {}).get("grpc-service-name", "") if isinstance(p.get("grpc-opts"), dict) else ""
-
-            reality = p.get("reality-opts", {})
-            if isinstance(reality, dict):
-                s.public_key = reality.get("public-key", "")
-                s.short_id = reality.get("short-id", "")
-
-        elif ptype == "ss":
-            s.ss_method = p.get("cipher", "")
-            s.password = p.get("password", "")
-
-        elif ptype == "trojan":
-            s.password = p.get("password", "")
-            s.sni = p.get("sni", "") or s.server
-            s.network = p.get("network", "tcp")
-
-        elif ptype in ("hysteria2", "hy2"):
-            s.password = p.get("password", "")
-            s.sni = p.get("sni", "") or s.server
-            s.obfs = p.get("obfs", "")
-
-        elif ptype == "vless":
-            s.uuid = p.get("uuid", "")
-            s.flow = p.get("flow", "")
-            s.network = p.get("network", "tcp")
-            s.security = p.get("tls", False)
-            if isinstance(s.security, bool):
-                s.security = "tls" if s.security else "none"
-            s.sni = p.get("servername", "") or s.server
-
-        servers.append(s)
 
     return servers
 

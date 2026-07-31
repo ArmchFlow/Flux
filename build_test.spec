@@ -16,8 +16,9 @@ a = Analysis(
         ('bin/tunnel.dll', 'bin'),
         ('bin/tunnel_service.exe', 'bin'),
         ('bin/flux.ico', 'bin'),
-        ('bin/freeflux.conf', 'bin'),
         ('assets/flags/*.png', 'assets/flags'),
+        ('LICENSE', '.'),
+        ('THIRD_PARTY_NOTICES.md', '.'),
     ],
     hiddenimports=[
         'core.crypto',

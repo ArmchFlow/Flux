@@ -1,13 +1,13 @@
 __pycache__/
 build/
 dist/
+test_build/
 *.log
 logs/
 myvpn.log
 *.pyc
-bin/*.exe
-bin/*.dll
-bin/tunnel_service.exe
 Flux*.exe
 Flux*.png
 Flux*.ico
+*.conf
+!*.example

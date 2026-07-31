@@ -26,29 +26,7 @@ _COL_SUB = 4
 
 _ALL_PROTOCOLS = ["vless", "vmess", "ss", "trojan", "hysteria2", "awg"]
 
-_FREEFLUX_NAMES = {"FreeFlux"}
-
 _FLAG_CACHE: dict[str, QPixmap] = {}
-
-
-def _app_icon_paths():
-    try:
-        _base = Path(sys._MEIPASS)
-    except AttributeError:
-        _base = Path(__file__).resolve().parent.parent
-    return [_base / "bin" / "flux.ico", _base / "Flux light 2.png"]
-
-
-def _app_icon_pixmap(size: int = 20):
-    for p in _app_icon_paths():
-        if p.exists():
-            pix = QPixmap(str(p))
-            if not pix.isNull():
-                return pix.scaled(
-                    size, size,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation)
-    return None
 
 
 def _flag_asset_dir():
@@ -101,9 +79,6 @@ def _make_flag_cell(srv: ProxyServer, flag: str) -> QLabel:
     pix = None
     if flag:
         pix = _flag_pixmap(emoji_to_code(flag))
-    elif srv.display_name in _FREEFLUX_NAMES \
-            or srv.subscription_tag in _FREEFLUX_NAMES:
-        pix = _app_icon_pixmap()
     if pix is None:
         pix = _globe_pixmap()
     cell.setPixmap(pix)
