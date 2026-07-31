@@ -162,6 +162,9 @@ _STRINGS = {
         "export_failed": "Failed to export:",
         "import_failed": "Failed to import:",
         "traffic_label": "\u2193 {}  \u2191 {}  \u00b7  {} / {}  \u00b7  {}",
+        "advanced_settings": "Advanced Settings",
+        "settings_applied": "Settings applied",
+        "connected_marker": "\u25cf Connected",
     },
     "ru": {
         "app_title": "Flux",
@@ -322,6 +325,9 @@ _STRINGS = {
         "export_failed": "Ошибка экспорта:",
         "import_failed": "Ошибка импорта:",
         "traffic_label": "\u2193 {}  \u2191 {}  \u00b7  {} / {}  \u00b7  {}",
+        "advanced_settings": "Расширенные настройки",
+        "settings_applied": "Настройки применены",
+        "connected_marker": "\u25cf Подключен",
     },
 }
 

@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QGroupBox, QCheckBox, QSpinBox, QLineEdit,
     QComboBox, QLabel, QScrollArea, QPushButton,
 )
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt, QPropertyAnimation, QEasingCurve, QAbstractAnimation
 
 from core.settings_manager import SettingsManager
 from core.translations import tr, set_language
@@ -20,6 +20,7 @@ class SettingsTab(QWidget):
         self.settings_mgr = settings_mgr
         self._setup_ui()
         self._load_settings()
+        self._apply_advanced_state(animated=False)
 
     def _setup_ui(self):
         outer = QVBoxLayout(self)
@@ -38,6 +39,50 @@ class SettingsTab(QWidget):
         title = QLabel(tr("settings"))
         title.setObjectName("titleLabel")
         main_layout.addWidget(title)
+
+        ui_group = QGroupBox(tr("interface"))
+        ui_layout = QFormLayout(ui_group)
+        ui_layout.setSpacing(8)
+
+        self.minimize_to_tray = QCheckBox(tr("minimize_tray"))
+        self.minimize_to_tray.toggled.connect(self._on_setting_changed)
+        ui_layout.addRow(self.minimize_to_tray)
+
+        self.start_minimized = QCheckBox(tr("start_minimized"))
+        self.start_minimized.toggled.connect(self._on_setting_changed)
+        ui_layout.addRow(self.start_minimized)
+
+        self.auto_connect = QCheckBox(tr("auto_connect"))
+        self.auto_connect.toggled.connect(self._on_setting_changed)
+        ui_layout.addRow(self.auto_connect)
+
+        self.auto_reconnect = QCheckBox(tr("auto_reconnect"))
+        self.auto_reconnect.toggled.connect(self._on_setting_changed)
+        ui_layout.addRow(self.auto_reconnect)
+
+        self.language_cb = QComboBox()
+        self.language_cb.addItem("English", "en")
+        self.language_cb.addItem("Русский", "ru")
+        self.language_cb.currentIndexChanged.connect(self._on_setting_changed)
+        ui_layout.addRow(tr("language") + ":", self.language_cb)
+
+        self.auto_select = QComboBox()
+        self.auto_select.addItems([tr("manual_select"), tr("auto_select")])
+        self.auto_select.currentIndexChanged.connect(self._on_setting_changed)
+        ui_layout.addRow(tr("server_select"), self.auto_select)
+
+        main_layout.addWidget(ui_group)
+
+        self._advanced_btn = QPushButton()
+        self._advanced_btn.setObjectName("advancedToggle")
+        self._advanced_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._advanced_btn.clicked.connect(self._on_toggle_advanced)
+        main_layout.addWidget(self._advanced_btn)
+
+        self._advanced_container = QWidget()
+        advanced_layout = QVBoxLayout(self._advanced_container)
+        advanced_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_layout.setSpacing(16)
 
         tun_group = QGroupBox(tr("tun_config"))
         tun_layout = QFormLayout(tun_group)
@@ -73,7 +118,7 @@ class SettingsTab(QWidget):
         self.stack.currentTextChanged.connect(self._on_setting_changed)
         tun_layout.addRow(tr("stack"), self.stack)
 
-        main_layout.addWidget(tun_group)
+        advanced_layout.addWidget(tun_group)
 
         split_group = QGroupBox(tr("split_tunneling"))
         split_layout = QVBoxLayout(split_group)
@@ -100,7 +145,7 @@ class SettingsTab(QWidget):
         self.custom_routes.textChanged.connect(self._on_setting_changed)
         split_layout.addWidget(self.custom_routes)
 
-        main_layout.addWidget(split_group)
+        advanced_layout.addWidget(split_group)
 
         dns_group = QGroupBox(tr("dns"))
         dns_layout = QFormLayout(dns_group)
@@ -122,7 +167,7 @@ class SettingsTab(QWidget):
         self.fakeip_range.textChanged.connect(self._on_setting_changed)
         dns_layout.addRow(tr("fakeip_range"), self.fakeip_range)
 
-        main_layout.addWidget(dns_group)
+        advanced_layout.addWidget(dns_group)
 
         log_group = QGroupBox(tr("logging"))
         log_layout = QFormLayout(log_group)
@@ -137,40 +182,9 @@ class SettingsTab(QWidget):
         self.log_timestamp.toggled.connect(self._on_setting_changed)
         log_layout.addRow(self.log_timestamp)
 
-        main_layout.addWidget(log_group)
+        advanced_layout.addWidget(log_group)
 
-        ui_group = QGroupBox(tr("interface"))
-        ui_layout = QFormLayout(ui_group)
-        ui_layout.setSpacing(8)
-
-        self.minimize_to_tray = QCheckBox(tr("minimize_tray"))
-        self.minimize_to_tray.toggled.connect(self._on_setting_changed)
-        ui_layout.addRow(self.minimize_to_tray)
-
-        self.start_minimized = QCheckBox(tr("start_minimized"))
-        self.start_minimized.toggled.connect(self._on_setting_changed)
-        ui_layout.addRow(self.start_minimized)
-
-        self.auto_connect = QCheckBox(tr("auto_connect"))
-        self.auto_connect.toggled.connect(self._on_setting_changed)
-        ui_layout.addRow(self.auto_connect)
-
-        self.auto_reconnect = QCheckBox(tr("auto_reconnect"))
-        self.auto_reconnect.toggled.connect(self._on_setting_changed)
-        ui_layout.addRow(self.auto_reconnect)
-
-        self.language_cb = QComboBox()
-        self.language_cb.addItem("English", "en")
-        self.language_cb.addItem("Русский", "ru")
-        self.language_cb.currentIndexChanged.connect(self._on_setting_changed)
-        ui_layout.addRow(tr("language") + ":", self.language_cb)
-
-        self.auto_select = QComboBox()
-        self.auto_select.addItems([tr("manual_select"), tr("auto_select")])
-        self.auto_select.currentIndexChanged.connect(self._on_setting_changed)
-        ui_layout.addRow(tr("server_select"), self.auto_select)
-
-        main_layout.addWidget(ui_group)
+        main_layout.addWidget(self._advanced_container)
         main_layout.addStretch()
 
         scroll.setWidget(container)
@@ -181,6 +195,49 @@ class SettingsTab(QWidget):
         save_btn.setMinimumHeight(40)
         save_btn.clicked.connect(self._save_settings)
         outer.addWidget(save_btn)
+
+    def _update_advanced_btn_text(self):
+        state = self.settings_mgr.settings.advanced_open
+        chevron = "\u25be" if state else "\u25b8"
+        self._advanced_btn.setText(f"{chevron}  {tr('advanced_settings')}")
+
+    def _apply_advanced_state(self, animated: bool = True):
+        open_state = self.settings_mgr.settings.advanced_open
+        container = self._advanced_container
+        if open_state:
+            if animated:
+                container.show()
+                container.setMaximumHeight(container.sizeHint().height())
+                anim = QPropertyAnimation(container, b"maximumHeight")
+                anim.setDuration(250)
+                anim.setStartValue(0)
+                anim.setEndValue(container.sizeHint().height())
+                anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+                anim.finished.connect(
+                    lambda: container.setMaximumHeight(16777215))
+                anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+            else:
+                container.show()
+                container.setMaximumHeight(16777215)
+        else:
+            if animated:
+                container.setMaximumHeight(container.sizeHint().height())
+                anim = QPropertyAnimation(container, b"maximumHeight")
+                anim.setDuration(250)
+                anim.setStartValue(container.sizeHint().height())
+                anim.setEndValue(0)
+                anim.setEasingCurve(QEasingCurve.Type.InCubic)
+                anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+            else:
+                container.setMaximumHeight(0)
+                container.hide()
+        self._update_advanced_btn_text()
+
+    def _on_toggle_advanced(self):
+        self.settings_mgr.settings.advanced_open = (
+            not self.settings_mgr.settings.advanced_open)
+        self.settings_mgr.save()
+        self._apply_advanced_state(animated=True)
 
     def _load_settings(self):
         s = self.settings_mgr.settings

@@ -157,6 +157,25 @@ QPushButton#successBtn:hover {
     background-color: #94e2d5;
 }
 
+QPushButton#advancedToggle {
+    background-color: transparent;
+    color: #89b4fa;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+}
+
+QPushButton#advancedToggle:hover {
+    background-color: rgba(137, 180, 250, 0.1);
+}
+
+QLabel#tabIndicator {
+    background-color: #89b4fa;
+    border-radius: 1px;
+}
+
 QPushButton#ghostBtn {
     background-color: transparent;
     color: #89b4fa;

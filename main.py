@@ -62,8 +62,8 @@ def _ensure_admin():
             sys.exit(0)
 
 
-def _import_standart_awg(sub_manager: SubscriptionManager, data_dir: Path):
-    """Import standart.conf on first run if no Amnezia servers exist."""
+def _import_freeflux_awg(sub_manager: SubscriptionManager, data_dir: Path):
+    """Import the bundled FreeFlux config on first run if no Amnezia servers exist."""
     try:
         has_awg = any(s.protocol == "awg" for s in sub_manager.get_all_servers())
         if has_awg:
@@ -74,16 +74,16 @@ def _import_standart_awg(sub_manager: SubscriptionManager, data_dir: Path):
         except AttributeError:
             base = Path(__file__).parent
 
-        conf_path = base / "bin" / "standart.conf"
+        conf_path = base / "bin" / "freeflux.conf"
         if not conf_path.exists():
-            conf_path = base / "standart.conf"
+            conf_path = base / "freeflux.conf"
 
         if conf_path.exists():
             srv = sub_manager.import_conf_file(str(conf_path))
             if srv:
                 logging.getLogger("main").info("Imported default AWG config: %s", srv.name)
     except Exception as e:
-        logging.getLogger("main").warning("Failed to import standart AWG config: %s", e)
+        logging.getLogger("main").warning("Failed to import FreeFlux AWG config: %s", e)
 
 
 LOCK_PORT = 19876
@@ -177,7 +177,7 @@ def main():
     set_language(settings_mgr.settings.language)
     sub_manager = SubscriptionManager(data_dir, vault)
 
-    _import_standart_awg(sub_manager, data_dir)
+    _import_freeflux_awg(sub_manager, data_dir)
 
     sb_path = find_binary("sing-box.exe")
     xr_path = find_binary("xray.exe")

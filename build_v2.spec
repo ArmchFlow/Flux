@@ -16,10 +16,11 @@ datas=[
         ('bin/tunnel.dll', 'bin'),
         ('bin/tunnel_service.exe', 'bin'),
         ('bin/flux.ico', 'bin'),
-        ('bin/standart.conf', 'bin'),
+        ('bin/freeflux.conf', 'bin'),
     ],
     hiddenimports=[
         'core.crypto',
+        'core.flags',
         'core.proxy_parser',
         'core.subscription',
         'core.settings_manager',

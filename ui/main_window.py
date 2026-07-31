@@ -9,11 +9,11 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QTabWidget,
     QStatusBar, QLabel, QPushButton, QMessageBox,
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QRect, QEasingCurve, QPropertyAnimation, QAbstractAnimation
 from PyQt6.QtGui import QCloseEvent, QIcon
 
 from .sub_tab import SubscriptionTab
-from .servers_tab import ServersTab
+from .servers_tab import ServersTab, _COL_NAME
 from .settings_tab import SettingsTab
 from .log_tab import LogTab
 from .tray import SystemTray
@@ -179,7 +179,39 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._log_tab, tr("tab_logs"))
 
         layout.addWidget(self._tabs)
+        self._setup_tab_indicator()
         logger.debug("UI tabs set up: Subscriptions, Servers, Settings, Logs")
+
+    def _setup_tab_indicator(self):
+        bar = self._tabs.tabBar()
+        self._tab_indicator = QLabel(bar)
+        self._tab_indicator.setObjectName("tabIndicator")
+        self._tab_indicator.setFixedHeight(3)
+        self._tab_indicator.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._tabs.currentChanged.connect(self._animate_tab_indicator)
+        QTimer.singleShot(0, self._snap_tab_indicator)
+
+    def _tab_indicator_rect(self) -> QRect:
+        bar = self._tabs.tabBar()
+        rect = bar.tabRect(self._tabs.currentIndex())
+        return QRect(rect.x() + 6, bar.height() - 3, max(10, rect.width() - 12), 3)
+
+    def _snap_tab_indicator(self):
+        self._tab_indicator.setGeometry(self._tab_indicator_rect())
+        self._tab_indicator.raise_()
+
+    def _animate_tab_indicator(self, index: int):
+        rect = self._tab_indicator_rect()
+        anim = QPropertyAnimation(self._tab_indicator, b"geometry")
+        anim.setDuration(200)
+        anim.setStartValue(self._tab_indicator.geometry())
+        anim.setEndValue(rect)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._snap_tab_indicator()
 
     def _setup_statusbar(self):
         status = QStatusBar()
@@ -220,7 +252,7 @@ class MainWindow(QMainWindow):
         sel_tag = None
         rows = {idx.row() for idx in self._servers_tab.table.selectedIndexes()}
         if rows:
-            item = self._servers_tab.table.item(rows.pop(), 0)
+            item = self._servers_tab.table.item(rows.pop(), _COL_NAME)
             if item:
                 sel_tag = item.data(Qt.ItemDataRole.UserRole)
         self._status_text.setText(" " + tr("updating_sub").format(url[:60]))
@@ -230,7 +262,7 @@ class MainWindow(QMainWindow):
             self._servers_tab.load_servers()
             if sel_tag:
                 for r in range(self._servers_tab.table.rowCount()):
-                    it = self._servers_tab.table.item(r, 0)
+                    it = self._servers_tab.table.item(r, _COL_NAME)
                     if it and it.data(Qt.ItemDataRole.UserRole) == sel_tag:
                         self._servers_tab.table.selectRow(r)
                         break
@@ -265,14 +297,14 @@ class MainWindow(QMainWindow):
         sel_tag = None
         rows = {idx.row() for idx in self._servers_tab.table.selectedIndexes()}
         if rows:
-            item = self._servers_tab.table.item(rows.pop(), 0)
+            item = self._servers_tab.table.item(rows.pop(), _COL_NAME)
             if item:
                 sel_tag = item.data(Qt.ItemDataRole.UserRole)
         self._sub_tab.refresh_after_update()
         self._servers_tab.load_servers()
         if sel_tag:
             for r in range(self._servers_tab.table.rowCount()):
-                it = self._servers_tab.table.item(r, 0)
+                it = self._servers_tab.table.item(r, _COL_NAME)
                 if it and it.data(Qt.ItemDataRole.UserRole) == sel_tag:
                     self._servers_tab.table.selectRow(r)
                     break
@@ -480,6 +512,7 @@ class MainWindow(QMainWindow):
             self._reconnect_attempts = 0
             self._auto_reconnecting = False
             self.set_connected(True)
+            self._servers_tab.set_active_server(self._active_tag)
             self._set_status_dot("connected")
             self._traffic.start()
             self._save_last_server(self._active_tag)
@@ -506,6 +539,7 @@ class MainWindow(QMainWindow):
         self._servers_tab.set_connecting(False)
         self.xray_mgr.stop()
         self.set_connected(False)
+        self._servers_tab.set_active_server(None)
         self._set_status_dot("disconnected")
         self._status_text.setText(" " + tr("disconnected"))
         self._toasts.show(tr("disconnected"), "info", 2000)
@@ -588,6 +622,7 @@ class MainWindow(QMainWindow):
 
     def _on_settings_changed(self):
         logger.info("Settings changed by user")
+        self._toasts.show(tr("settings_applied"), "success", 2500)
         if self._connected:
             logger.info("VPN is connected, asking about restart...")
             reply = QMessageBox.question(

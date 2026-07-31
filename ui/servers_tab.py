@@ -6,20 +6,22 @@ from PyQt6.QtWidgets import (
 )
 from pathlib import Path
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QAction, QColor
+from PyQt6.QtGui import QAction, QColor, QFont
 
 from core.subscription import SubscriptionManager
 from core.proxy_parser import ProxyServer
+from core.flags import extract_flag
 from core.translations import tr
 from .animations import attach_press_feedback
 from .widgets import EmptyStateWidget, TrailRingOverlay, PulseHitOverlay, SpeedTrailOverlay
 
 logger = logging.getLogger(__name__)
 
-_COL_NAME = 0
-_COL_PROTO = 1
-_COL_PING = 2
-_COL_SUB = 3
+_COL_FLAG = 0
+_COL_NAME = 1
+_COL_PROTO = 2
+_COL_PING = 3
+_COL_SUB = 4
 
 _ALL_PROTOCOLS = ["vless", "vmess", "ss", "trojan", "hysteria2", "awg"]
 
@@ -44,6 +46,7 @@ class ServersTab(QWidget):
         self._ping_sort_asc = True
         self._filter_proto = ""
         self._pinned: set[str] = set()
+        self._active_tag: str | None = None
         self._pinned_file = Path(sub_manager.data_dir) / "pinned.json"
         self._load_pinned()
         self._setup_ui()
@@ -129,9 +132,9 @@ class ServersTab(QWidget):
         vbox.addLayout(btn_row)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(4)
+        self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels([
-            tr("name"), tr("protocol"), tr("ping"), tr("subscription")
+            "", tr("name"), tr("protocol"), tr("ping"), tr("subscription")
         ])
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -147,12 +150,14 @@ class ServersTab(QWidget):
 
         header = self.table.horizontalHeader()
         header.setStretchLastSection(False)
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self.table.setColumnWidth(3, 110)
+        self.table.setColumnWidth(0, 44)
+        self.table.setColumnWidth(4, 110)
         header.sectionClicked.connect(self._on_header_clicked)
         self.table.doubleClicked.connect(self._on_double_click)
 
@@ -196,8 +201,19 @@ class ServersTab(QWidget):
             row = self.table.rowCount()
             self.table.insertRow(row)
             self._rows.append(srv)
-            item = QTableWidgetItem(srv.display_name)
+
+            flag, display_name = extract_flag(srv.display_name)
+            if flag:
+                flag_label = QLabel(flag)
+                flag_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                flag_label.setFont(QFont("Segoe UI Emoji", 14))
+                self.table.setCellWidget(row, _COL_FLAG, flag_label)
+
+            item = QTableWidgetItem(display_name)
             item.setData(Qt.ItemDataRole.UserRole, srv.tag)
+            if srv.tag == self._active_tag:
+                item.setText(f"{display_name}   {tr('connected_marker')}")
+                item.setForeground(QColor("#a6e3a1"))
             self.table.setItem(row, _COL_NAME, item)
             pi = QTableWidgetItem(srv.protocol.upper())
             if srv.protocol == "awg" and srv.encryption:
@@ -227,6 +243,13 @@ class ServersTab(QWidget):
             si.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             si.setFlags(si.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, _COL_SUB, si)
+
+            if srv.tag == self._active_tag:
+                tint = QColor(162, 227, 161, 28)
+                for col in range(self.table.columnCount()):
+                    it = self.table.item(row, col)
+                    if it:
+                        it.setBackground(tint)
 
         count = self.table.rowCount()
         if count:
@@ -273,6 +296,12 @@ class ServersTab(QWidget):
             return
         self.connect_btn.hide()
         self.disconnect_btn.show()
+
+    def set_active_server(self, tag: str | None):
+        if self._active_tag == tag:
+            return
+        self._active_tag = tag
+        self._render_table(self._servers, self.search_input.text())
 
     def set_connecting(self, connecting: bool):
         if connecting:

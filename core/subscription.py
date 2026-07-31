@@ -159,11 +159,12 @@ class SubscriptionManager:
         srv = parse_awg_conf(filepath)
         if not srv:
             return None
-        srv.subscription_tag = "Amnezia"
+        srv.name = "FreeFlux"
+        srv.subscription_tag = "FreeFlux"
         url = "amnezia://imported"
         sub = next((s for s in self.subscriptions if s.url == url), None)
         if not sub:
-            sub = Subscription(url=url, name="AmneziaWG")
+            sub = Subscription(url=url, name="FreeFlux")
             self.subscriptions.append(sub)
         existing = self._servers_cache.get(url, [])
         existing = [s for s in existing if s.server != srv.server or s.port != srv.port]
