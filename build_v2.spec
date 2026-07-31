@@ -17,6 +17,7 @@ datas=[
         ('bin/tunnel_service.exe', 'bin'),
         ('bin/flux.ico', 'bin'),
         ('bin/freeflux.conf', 'bin'),
+        ('assets/flags/*.png', 'assets/flags'),
     ],
     hiddenimports=[
         'core.crypto',

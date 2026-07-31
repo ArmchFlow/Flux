@@ -141,7 +141,6 @@ class EmptyStateWidget(QWidget):
 
         inner = QVBoxLayout()
         inner.setSpacing(8)
-        inner.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         icon = _EmptyIcon(32, self._icon_color)
         inner.addWidget(icon, 0, Qt.AlignmentFlag.AlignHCenter)

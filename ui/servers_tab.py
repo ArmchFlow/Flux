@@ -6,12 +6,12 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QMenu, QStackedWidget,
 )
 from pathlib import Path
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QRectF, QLineF
+from PyQt6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
 
 from core.subscription import SubscriptionManager
 from core.proxy_parser import ProxyServer
-from core.flags import extract_flag
+from core.flags import extract_flag, emoji_to_code
 from core.translations import tr
 from .animations import attach_press_feedback
 from .widgets import EmptyStateWidget, TrailRingOverlay, PulseHitOverlay, SpeedTrailOverlay, chevron_pixmap
@@ -26,9 +26,9 @@ _COL_SUB = 4
 
 _ALL_PROTOCOLS = ["vless", "vmess", "ss", "trojan", "hysteria2", "awg"]
 
-_NO_FLAG_MARKER = "\U0001F310"  # 🌐 globe: shown when a server has no country flag
-
 _FREEFLUX_NAMES = {"FreeFlux"}
+
+_FLAG_CACHE: dict[str, QPixmap] = {}
 
 
 def _app_icon_paths():
@@ -51,21 +51,62 @@ def _app_icon_pixmap(size: int = 20):
     return None
 
 
+def _flag_asset_dir():
+    try:
+        _base = Path(sys._MEIPASS)
+    except AttributeError:
+        _base = Path(__file__).resolve().parent.parent
+    return _base / "assets" / "flags"
+
+
+def _flag_pixmap(code: str, width: int = 24):
+    code = code.lower()
+    if code not in _FLAG_CACHE:
+        pix = None
+        p = _flag_asset_dir() / f"{code}.png"
+        if p.exists():
+            raw = QPixmap(str(p))
+            if not raw.isNull():
+                pix = raw.scaled(
+                    width, 16,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation)
+        _FLAG_CACHE[code] = pix
+    return _FLAG_CACHE[code]
+
+
+def _globe_pixmap(size: int = 22):
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pm)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(QPen(QColor("#a6adc8"), 1.4))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.drawEllipse(QRectF(size * 0.08, size * 0.08, size * 0.84, size * 0.84))
+    painter.drawEllipse(QRectF(size * 0.08, size * 0.36, size * 0.84, size * 0.28))
+    painter.drawLine(QLineF(size * 0.5, size * 0.08, size * 0.5, size * 0.92))
+    painter.drawLine(QLineF(size * 0.08, size * 0.5, size * 0.92, size * 0.5))
+    painter.end()
+    return pm
+
+
 def _chevron_pixmap(size: int = 14):
     return chevron_pixmap(down=True, size=size)
 
 
 def _make_flag_cell(srv: ProxyServer, flag: str) -> QLabel:
-    cell = QLabel(flag or _NO_FLAG_MARKER)
+    cell = QLabel()
     cell.setObjectName("flagCell")
     cell.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    cell.setFont(QFont("Segoe UI Emoji", 14))
-    if not flag and (srv.display_name in _FREEFLUX_NAMES
-                     or srv.subscription_tag in _FREEFLUX_NAMES):
+    pix = None
+    if flag:
+        pix = _flag_pixmap(emoji_to_code(flag))
+    elif srv.display_name in _FREEFLUX_NAMES \
+            or srv.subscription_tag in _FREEFLUX_NAMES:
         pix = _app_icon_pixmap()
-        if pix is not None:
-            cell.setPixmap(pix)
-            cell.setText("")
+    if pix is None:
+        pix = _globe_pixmap()
+    cell.setPixmap(pix)
     return cell
 
 

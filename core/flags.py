@@ -33,6 +33,17 @@ def _code_to_flag(code: str) -> str:
         _FLAG_BASE + ord(code[1]) - ord("A"))
 
 
+def emoji_to_code(flag_emoji: str) -> str:
+    """Convert an emoji flag (regional indicator pair) to its 2-letter code."""
+    if len(flag_emoji) != 2:
+        return ""
+    a = ord(flag_emoji[0]) - _FLAG_BASE
+    b = ord(flag_emoji[1]) - _FLAG_BASE
+    if not (0 <= a < 26 and 0 <= b < 26):
+        return ""
+    return chr(ord("A") + a) + chr(ord("A") + b)
+
+
 def extract_flag(name: str) -> Tuple[str, str]:
     """Return (flag_emoji, cleaned_name).
 
