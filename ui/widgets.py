@@ -1,9 +1,56 @@
 from PyQt6.QtCore import Qt, QTimer, QRectF, QEvent, QPoint
 from PyQt6.QtGui import QColor, QPainter, QRadialGradient, QPainterPath, QPen
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QDialog
 from typing import Optional, Callable
 
 import math
+
+from core.translations import tr
+
+
+class SpeedResultDialog(QDialog):
+    def __init__(self, down_mbit: float, up_mbit: float, parent=None):
+        super().__init__(parent)
+        self.setObjectName("speedResultDialog")
+        self.setWindowTitle(tr("speed_test"))
+        self.setModal(True)
+        self.setMinimumWidth(340)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(32, 24, 32, 28)
+        layout.setSpacing(6)
+
+        title = QLabel(tr("speed_test"))
+        title.setObjectName("speedResultTitle")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        down_lbl = QLabel(tr("speed_down"))
+        down_lbl.setObjectName("speedResultLabel")
+        down_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(down_lbl)
+
+        down_val = QLabel(f"\u2193 {down_mbit:.0f} {tr('speed_mbps')}")
+        down_val.setObjectName("speedResultValueDown")
+        down_val.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(down_val)
+
+        up_lbl = QLabel(tr("speed_up"))
+        up_lbl.setObjectName("speedResultLabel")
+        up_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        up_lbl.setContentsMargins(0, 8, 0, 0)
+        layout.addWidget(up_lbl)
+
+        up_val = QLabel(f"\u2191 {up_mbit:.0f} {tr('speed_mbps')}")
+        up_val.setObjectName("speedResultValueUp")
+        up_val.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(up_val)
+
+        ok_btn = QPushButton(tr("close"))
+        ok_btn.setObjectName("successBtn")
+        ok_btn.setMinimumHeight(38)
+        ok_btn.clicked.connect(self.accept)
+        layout.addWidget(ok_btn)
 
 
 class StatusIndicator(QWidget):

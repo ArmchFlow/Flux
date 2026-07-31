@@ -19,7 +19,7 @@ from .log_tab import LogTab
 from .tray import SystemTray
 from .styles import DARK_STYLE
 from .animations import ToastManager
-from .widgets import StatusIndicator
+from .widgets import StatusIndicator, SpeedResultDialog
 
 from core.subscription import SubscriptionManager
 from core.settings_manager import SettingsManager
@@ -33,8 +33,9 @@ logger = logging.getLogger(__name__)
 
 _DOWNLOAD_TEST_URL = "https://speed.cloudflare.com/__down?bytes=94371840"
 _UPLOAD_TEST_URL = "https://speed.cloudflare.com/__up"
-_DOWNLOAD_DURATION_S = 8.0
-_UPLOAD_DURATION_S = 6.0
+_DOWNLOAD_DURATION_S = 10.0
+_UPLOAD_DURATION_S = 10.0
+_WARMUP_S = 3.0
 _RECONNECT_MAX_ATTEMPTS = 3
 _RECONNECT_DELAY_MS = 3000
 
@@ -44,7 +45,7 @@ class _VpnSignals(QObject):
 
 
 class _SpeedSignals(QObject):
-    done = pyqtSignal(bool, str)
+    done = pyqtSignal(bool, str, float, float)
 
 
 class MainWindow(QMainWindow):
@@ -667,21 +668,25 @@ class MainWindow(QMainWindow):
                 up = _measure_upload()
                 self._speed_sig.done.emit(
                     True, tr("speed_result").format(
-                        f"{down:.2f}", f"{up:.2f}"))
+                        f"{down:.0f}", f"{up:.0f}"),
+                    down, up)
             except requests.Timeout:
                 logger.error("Speed test timeout")
-                self._speed_sig.done.emit(False, tr("speed_timeout"))
+                self._speed_sig.done.emit(False, tr("speed_timeout"), 0.0, 0.0)
             except Exception as e:
                 logger.error("Speed test failed: %s", e)
-                self._speed_sig.done.emit(False, tr("speed_error").format(e))
+                self._speed_sig.done.emit(
+                    False, tr("speed_error").format(e), 0.0, 0.0)
 
         threading.Thread(target=_work, daemon=True).start()
 
-    def _on_speed_done(self, success: bool, msg: str):
+    def _on_speed_done(self, success: bool, msg: str, down: float, up: float):
         self._servers_tab.set_speed_testing(False)
         self._status_text.setText(" " + msg)
         if success:
             self._toasts.show(msg, "success", 4000)
+            dlg = SpeedResultDialog(down, up, self)
+            dlg.exec()
         else:
             self._toasts.show(msg, "error", 3000)
 
@@ -787,44 +792,62 @@ def _format_uptime(secs: int) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
-def _measure_download(duration: float = _DOWNLOAD_DURATION_S) -> float:
+def _measure_download(duration: float = _DOWNLOAD_DURATION_S,
+                      warmup: float = _WARMUP_S) -> float:
     import requests
     start = time.perf_counter()
     size = 0
-    with requests.get(
-            _DOWNLOAD_TEST_URL, stream=True, timeout=(10, 30),
-            headers={"User-Agent": "Flux/1.0"}) as r:
-        r.raise_for_status()
-        for chunk in r.iter_content(chunk_size=65536):
-            if time.perf_counter() - start >= duration:
-                break
-            size += len(chunk)
-    dt = time.perf_counter() - start
-    if dt <= 0:
-        return 0.0
-    return size / 1024 / 1024 / dt
+    warmup_size = 0
+    done = False
+    while not done:
+        with requests.get(
+                _DOWNLOAD_TEST_URL, stream=True, timeout=(10, 40),
+                headers={"User-Agent": "Flux/1.0"}) as r:
+            r.raise_for_status()
+            for chunk in r.iter_content(chunk_size=65536):
+                elapsed = time.perf_counter() - start
+                if elapsed >= duration:
+                    done = True
+                    break
+                size += len(chunk)
+                if elapsed < warmup:
+                    warmup_size += len(chunk)
+    total = time.perf_counter() - start
+    measured = min(total, duration) - warmup
+    if measured <= 0:
+        measured = max(0.001, total)
+        counted = size
+    else:
+        counted = size - warmup_size
+    return counted / 1024 / 1024 * 8 / measured
 
 
-def _measure_upload(duration: float = _UPLOAD_DURATION_S) -> float:
+def _measure_upload(duration: float = _UPLOAD_DURATION_S,
+                    warmup: float = _WARMUP_S) -> float:
     import requests
     sent = [0]
+    start = time.perf_counter()
+    warmup_end = start + warmup
 
     def gen():
         chunk = b"x" * 262144
-        end = time.perf_counter() + duration
-        while time.perf_counter() < end:
-            sent[0] += len(chunk)
-            yield chunk
+        end = start + duration
+        while True:
+            now = time.perf_counter()
+            if now >= end:
+                return
+            if now < warmup_end:
+                yield chunk
+            else:
+                sent[0] += len(chunk)
+                yield chunk
 
-    start = time.perf_counter()
     r = requests.post(
-        _UPLOAD_TEST_URL, data=gen(), timeout=(10, 30),
+        _UPLOAD_TEST_URL, data=gen(), timeout=(10, 40),
         headers={
             "User-Agent": "Flux/1.0",
             "Content-Type": "application/octet-stream",
         })
     r.raise_for_status()
-    dt = min(time.perf_counter() - start, duration)
-    if dt <= 0:
-        return 0.0
-    return sent[0] / 1024 / 1024 / dt
+    measured = max(0.001, duration - warmup)
+    return sent[0] / 1024 / 1024 * 8 / measured
