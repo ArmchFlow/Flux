@@ -2,15 +2,17 @@ import logging
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView,
-    QLabel, QLineEdit, QMenu,
+    QLabel, QLineEdit, QMenu, QStackedWidget,
 )
 from pathlib import Path
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QAction, QFont
+from PyQt6.QtGui import QAction
 
 from core.subscription import SubscriptionManager
 from core.proxy_parser import ProxyServer
 from core.translations import tr
+from .animations import Animations, attach_press_feedback
+from .widgets import EmptyStateWidget
 
 logger = logging.getLogger(__name__)
 
@@ -58,12 +60,23 @@ class ServersTab(QWidget):
 
     def _setup_ui(self):
         vbox = QVBoxLayout(self)
-        vbox.setContentsMargins(8, 8, 8, 8)
-        vbox.setSpacing(8)
+        vbox.setContentsMargins(12, 12, 12, 12)
+        vbox.setSpacing(10)
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
 
         title = QLabel(tr("servers"))
         title.setObjectName("titleLabel")
-        vbox.addWidget(title)
+        header_row.addWidget(title)
+
+        self.count_label = QLabel("")
+        self.count_label.setObjectName("countLabel")
+        self.count_label.hide()
+        header_row.addWidget(self.count_label)
+
+        header_row.addStretch()
+        vbox.addLayout(header_row)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
@@ -72,12 +85,14 @@ class ServersTab(QWidget):
         self.connect_btn.setObjectName("connectBtn")
         self.connect_btn.setMinimumHeight(30)
         self.connect_btn.clicked.connect(self._on_connect)
+        attach_press_feedback(self.connect_btn)
         btn_row.addWidget(self.connect_btn)
 
         self.disconnect_btn = QPushButton(tr("disconnect"))
         self.disconnect_btn.setObjectName("disconnectBtn")
         self.disconnect_btn.setMinimumHeight(30)
         self.disconnect_btn.clicked.connect(self._on_disconnect)
+        attach_press_feedback(self.disconnect_btn)
         self.disconnect_btn.hide()
         btn_row.addWidget(self.disconnect_btn)
 
@@ -94,6 +109,7 @@ class ServersTab(QWidget):
         ping_all_btn = QPushButton(tr("ping_all"))
         ping_all_btn.setMinimumHeight(30)
         ping_all_btn.clicked.connect(self._on_ping_all)
+        attach_press_feedback(ping_all_btn)
         btn_row.addWidget(ping_all_btn)
 
         btn_row.addStretch()
@@ -127,7 +143,13 @@ class ServersTab(QWidget):
         header.sectionClicked.connect(self._on_header_clicked)
         self.table.doubleClicked.connect(self._on_double_click)
 
-        vbox.addWidget(self.table, 1)
+        self._empty_state = EmptyStateWidget()
+        self._empty_state.set_texts(tr("no_servers_title"), tr("no_servers_subtitle"))
+
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self.table)
+        self._stack.addWidget(self._empty_state)
+        vbox.addWidget(self._stack, 1)
 
     def load_servers(self):
         self._servers = self.sub_manager.get_all_servers()
@@ -170,7 +192,6 @@ class ServersTab(QWidget):
             pi.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             pi.setFlags(pi.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, _COL_PROTO, pi)
-            self.table.setItem(row, _COL_PROTO, pi)
             d = self._delays.get(srv.tag, -1)
             if d >= 0:
                 ping_text = f"{d} " + tr("ping_ms")
@@ -186,6 +207,21 @@ class ServersTab(QWidget):
             si.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             si.setFlags(si.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, _COL_SUB, si)
+
+        count = self.table.rowCount()
+        if count:
+            self.count_label.setText(f"{tr('servers_total')} {count}")
+            self.count_label.show()
+        else:
+            self.count_label.hide()
+
+        if count == 0:
+            self._stack.setCurrentWidget(self._empty_state)
+        else:
+            was_empty = self._stack.currentWidget() is not self.table
+            self._stack.setCurrentWidget(self.table)
+            if was_empty:
+                Animations.fade_in(self.table, 200)
 
     def update_delays(self, delays: dict[str, int]):
         self._delays.update(delays)

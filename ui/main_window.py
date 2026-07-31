@@ -16,6 +16,8 @@ from .settings_tab import SettingsTab
 from .log_tab import LogTab
 from .tray import SystemTray
 from .styles import DARK_STYLE
+from .animations import Animations, ToastManager
+from .widgets import StatusIndicator
 
 from core.subscription import SubscriptionManager
 from core.settings_manager import SettingsManager
@@ -82,6 +84,9 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._setup_statusbar()
 
+        self._toasts = ToastManager.instance(self)
+        self._tabs.currentChanged.connect(self._on_tab_changed)
+
         self._ping_timer = QTimer(self)
         self._ping_timer.timeout.connect(self._auto_refresh_status)
         self._ping_timer.start(10000)
@@ -143,6 +148,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._tabs)
         logger.debug("UI tabs set up: Subscriptions, Servers, Settings, Logs")
 
+    def _on_tab_changed(self, index: int):
+        widget = self._tabs.widget(index)
+        if widget is not None:
+            Animations.fade_in(widget, 200)
+
     def _setup_statusbar(self):
         status = QStatusBar()
         status.setStyleSheet("""
@@ -154,6 +164,9 @@ class MainWindow(QMainWindow):
             }
         """)
 
+        self._status_dot = StatusIndicator(10, "#f38ba8")
+        status.addWidget(self._status_dot)
+
         self._status_text = QLabel(" " + tr("ready"))
         status.addWidget(self._status_text)
 
@@ -162,6 +175,17 @@ class MainWindow(QMainWindow):
 
         self.setStatusBar(status)
         logger.debug("Status bar ready")
+
+    def _set_status_dot(self, state: str):
+        if state == "connected":
+            self._status_dot.set_color("#a6e3a1")
+            self._status_dot.set_pulsing(True, speed=1.5)
+        elif state == "connecting":
+            self._status_dot.set_color("#f9e2af")
+            self._status_dot.set_pulsing(True, speed=2.0)
+        else:
+            self._status_dot.set_color("#f38ba8")
+            self._status_dot.set_pulsing(False)
 
     def _on_update_sub(self, url: str):
         logger.info("UI: update requested for subscription: %s", url[:80])
@@ -184,6 +208,7 @@ class MainWindow(QMainWindow):
                         break
             logger.info("Subscription updated: %d servers from %s", len(servers), url[:60])
             self._status_text.setText(f" Subscription updated: {len(servers)} servers")
+            self._toasts.show(f"{tr('subscription_updated')}: {len(servers)}", "success", 2500)
         except Exception as e:
             logger.error("Subscription update failed: %s", e, exc_info=True)
             QMessageBox.critical(
@@ -224,6 +249,7 @@ class MainWindow(QMainWindow):
                     self._servers_tab.table.selectRow(r)
                     break
         self._status_text.setText(" All subscriptions updated")
+        self._toasts.show(tr("subscription_updated"), "success", 2500)
 
     def _on_add_sub(self, url: str, name: str):
         logger.info("UI: add subscription requested: url=%s, name=%s", url[:80], name or "(auto)")
@@ -234,6 +260,7 @@ class MainWindow(QMainWindow):
             self._servers_tab.load_servers()
             logger.info("Subscription added: %s → %d servers", url[:60], len(servers))
             self._status_text.setText(f" Subscription added: {len(servers)} servers")
+            self._toasts.show(f"{tr('subscription_added')}: {len(servers)}", "success", 2500)
         except Exception as e:
             logger.error("Failed to add subscription: %s", e, exc_info=True)
             self._status_text.setText(" Fetch failed")
@@ -249,6 +276,7 @@ class MainWindow(QMainWindow):
             if srv:
                 self._servers_tab.load_servers()
                 self._status_text.setText(f" Imported: {srv.name}")
+                self._toasts.show(tr("config_imported"), "success", 2500)
         except Exception as e:
             logger.error("Import AWG config failed: %s", e, exc_info=True)
             QMessageBox.critical(self, tr("error"), f"Failed to import config:\n{e}")
@@ -287,6 +315,7 @@ class MainWindow(QMainWindow):
             return
         self._connecting = True
         self._status_text.setText(" " + tr("connecting"))
+        self._set_status_dot("connecting")
 
         servers = self.sub_manager.get_all_servers()
         logger.info("Servers available for connection: %d", len(servers))
@@ -411,14 +440,18 @@ class MainWindow(QMainWindow):
         self._connecting = False
         if success:
             self.set_connected(True)
+            self._set_status_dot("connected")
             if mode == "AWG":
                 self._status_text.setText(" " + tr("connected_tun") + " (AWG)")
+                self._toasts.show(tr("connected_tun") + " (AWG)", "success", 2500)
                 logger.info("=== CONNECTED (AWG) ===")
             else:
                 self._status_text.setText(" " + tr("connected_tun") + f" ({count} " + tr("servers_count").lower() + ")")
+                self._toasts.show(tr("connected_tun"), "success", 2500)
                 logger.info("=== CONNECTED (%s) ===", mode)
         else:
             logger.error("=== CONNECTION FAILED ===")
+            self._set_status_dot("disconnected")
             QMessageBox.critical(self, tr("connection_failed"), mode or "Could not start.")
             self._status_text.setText(" " + tr("connection_failed"))
 
@@ -427,7 +460,9 @@ class MainWindow(QMainWindow):
         self._connecting = False
         self.xray_mgr.stop()
         self.set_connected(False)
+        self._set_status_dot("disconnected")
         self._status_text.setText(" " + tr("disconnected"))
+        self._toasts.show(tr("disconnected"), "info", 2000)
 
     def set_connected(self, connected: bool):
         logger.debug("Connection state change: %s -> %s", self._connected, connected)
@@ -478,7 +513,9 @@ class MainWindow(QMainWindow):
             if self._connected and not self.xray_mgr.is_running:
                 logger.warning("Connection lost")
                 self.set_connected(False)
+                self._set_status_dot("disconnected")
                 self._status_text.setText(" Connection lost")
+                self._toasts.show(tr("connection_lost"), "error", 3000)
         except Exception:
             pass
 

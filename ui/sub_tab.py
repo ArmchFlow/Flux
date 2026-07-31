@@ -2,7 +2,7 @@ import logging
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLineEdit, QTableWidget, QTableWidgetItem, QHeaderView,
-    QLabel, QMessageBox, QMenu,
+    QLabel, QMessageBox, QMenu, QStackedWidget,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QAction
@@ -10,6 +10,8 @@ from PyQt6.QtWidgets import QFileDialog
 
 from core.subscription import SubscriptionManager, Subscription
 from core.translations import tr
+from .animations import Animations, attach_press_feedback
+from .widgets import EmptyStateWidget
 
 logger = logging.getLogger(__name__)
 
@@ -54,11 +56,13 @@ class SubscriptionTab(QWidget):
         add_btn.setObjectName("successBtn")
         add_btn.setMinimumHeight(36)
         add_btn.clicked.connect(self._on_add)
+        attach_press_feedback(add_btn)
         add_layout.addWidget(add_btn)
 
         import_btn = QPushButton(tr("import_awg"))
         import_btn.setMinimumHeight(36)
         import_btn.clicked.connect(self._on_import_conf)
+        attach_press_feedback(import_btn)
         add_layout.addWidget(import_btn)
 
         layout.addLayout(add_layout)
@@ -68,6 +72,7 @@ class SubscriptionTab(QWidget):
 
         update_all_btn = QPushButton(tr("update_all"))
         update_all_btn.clicked.connect(self._on_update_all)
+        attach_press_feedback(update_all_btn)
         btn_layout.addWidget(update_all_btn)
 
         btn_layout.addStretch()
@@ -99,7 +104,13 @@ class SubscriptionTab(QWidget):
 
         self.table.setColumnWidth(0, 160)
 
-        layout.addWidget(self.table)
+        self._empty_state = EmptyStateWidget()
+        self._empty_state.set_texts(tr("no_subscriptions"), tr("no_subscriptions_subtitle"))
+
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self.table)
+        self._stack.addWidget(self._empty_state)
+        layout.addWidget(self._stack)
 
     def _load_data(self):
         self.table.blockSignals(True)
@@ -139,6 +150,14 @@ class SubscriptionTab(QWidget):
                 self.table.setItem(row, 4, st)
         finally:
             self.table.blockSignals(False)
+
+        if self.table.rowCount() == 0:
+            self._stack.setCurrentWidget(self._empty_state)
+        else:
+            was_empty = self._stack.currentWidget() is not self.table
+            self._stack.setCurrentWidget(self.table)
+            if was_empty:
+                Animations.fade_in(self.table, 200)
 
     def _on_add(self):
         url = self.url_input.text().strip()
