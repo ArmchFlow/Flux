@@ -273,6 +273,9 @@ class TrailRingOverlay(_ButtonOverlay):
             self._head = (self._head + self._dir * 0.025) % 1.0
         self.update()
 
+    def _trail_t(self, i: int) -> float:
+        return (self._head - self._dir * i * (0.5 / self._dots)) % 1.0
+
     def paintEvent(self, event):
         if self._alpha <= 0:
             return
@@ -284,8 +287,7 @@ class TrailRingOverlay(_ButtonOverlay):
 
         n = self._dots
         for i in range(n):
-            t = (self._head + i * (0.5 / n)) % 1.0
-            pt = path.pointAtPercent(t)
+            pt = path.pointAtPercent(self._trail_t(i))
             k = 1.0 - i / n
             alpha = int(self._alpha * k * k)
             if alpha <= 0:
