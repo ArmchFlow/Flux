@@ -1,11 +1,33 @@
 from PyQt6.QtCore import Qt, QTimer, QRectF, QEvent, QPoint
-from PyQt6.QtGui import QColor, QPainter, QRadialGradient, QPainterPath, QPen
+from PyQt6.QtGui import QColor, QPainter, QRadialGradient, QPainterPath, QPen, QPixmap
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QDialog
 from typing import Optional, Callable
 
 import math
 
 from core.translations import tr
+
+
+def chevron_pixmap(down: bool = True, size: int = 12, color: str = "#a6adc8") -> QPixmap:
+    """Draw a chevron into a pixmap so it never depends on font glyphs."""
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pm)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    path = QPainterPath()
+    if down:
+        path.moveTo(size * 0.2, size * 0.35)
+        path.lineTo(size * 0.5, size * 0.65)
+        path.lineTo(size * 0.8, size * 0.35)
+    else:
+        path.moveTo(size * 0.35, size * 0.2)
+        path.lineTo(size * 0.65, size * 0.5)
+        path.lineTo(size * 0.35, size * 0.8)
+    painter.setPen(QPen(QColor(color), 1.6))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.drawPath(path)
+    painter.end()
+    return pm
 
 
 class SpeedResultDialog(QDialog):
@@ -114,7 +136,7 @@ class EmptyStateWidget(QWidget):
 
     def _setup_ui(self):
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(16, 16, 16, 16)
         outer.addStretch(1)
 
         inner = QVBoxLayout()

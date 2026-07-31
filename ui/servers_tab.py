@@ -1,4 +1,5 @@
 import logging
+import sys
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView,
@@ -6,14 +7,14 @@ from PyQt6.QtWidgets import (
 )
 from pathlib import Path
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QAction, QColor, QFont
+from PyQt6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 
 from core.subscription import SubscriptionManager
 from core.proxy_parser import ProxyServer
 from core.flags import extract_flag
 from core.translations import tr
 from .animations import attach_press_feedback
-from .widgets import EmptyStateWidget, TrailRingOverlay, PulseHitOverlay, SpeedTrailOverlay
+from .widgets import EmptyStateWidget, TrailRingOverlay, PulseHitOverlay, SpeedTrailOverlay, chevron_pixmap
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,48 @@ _COL_PING = 3
 _COL_SUB = 4
 
 _ALL_PROTOCOLS = ["vless", "vmess", "ss", "trojan", "hysteria2", "awg"]
+
+_NO_FLAG_MARKER = "\U0001F310"  # 🌐 globe: shown when a server has no country flag
+
+_FREEFLUX_NAMES = {"FreeFlux"}
+
+
+def _app_icon_paths():
+    try:
+        _base = Path(sys._MEIPASS)
+    except AttributeError:
+        _base = Path(__file__).resolve().parent.parent
+    return [_base / "bin" / "flux.ico", _base / "Flux light 2.png"]
+
+
+def _app_icon_pixmap(size: int = 20):
+    for p in _app_icon_paths():
+        if p.exists():
+            pix = QPixmap(str(p))
+            if not pix.isNull():
+                return pix.scaled(
+                    size, size,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation)
+    return None
+
+
+def _chevron_pixmap(size: int = 14):
+    return chevron_pixmap(down=True, size=size)
+
+
+def _make_flag_cell(srv: ProxyServer, flag: str) -> QLabel:
+    cell = QLabel(flag or _NO_FLAG_MARKER)
+    cell.setObjectName("flagCell")
+    cell.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    cell.setFont(QFont("Segoe UI Emoji", 14))
+    if not flag and (srv.display_name in _FREEFLUX_NAMES
+                     or srv.subscription_tag in _FREEFLUX_NAMES):
+        pix = _app_icon_pixmap()
+        if pix is not None:
+            cell.setPixmap(pix)
+            cell.setText("")
+    return cell
 
 
 class ServersTab(QWidget):
@@ -109,7 +152,7 @@ class ServersTab(QWidget):
         self.search_input.setMaximumWidth(150)
         self.search_input.setMinimumHeight(30)
         self.search_input.textChanged.connect(self._on_search)
-        filter_act = QAction("\u25be", self)
+        filter_act = QAction(QIcon(_chevron_pixmap()), "", self)
         filter_act.triggered.connect(self._on_filter_menu)
         self.search_input.addAction(filter_act, QLineEdit.ActionPosition.TrailingPosition)
         btn_row.addWidget(self.search_input)
@@ -203,11 +246,9 @@ class ServersTab(QWidget):
             self._rows.append(srv)
 
             flag, display_name = extract_flag(srv.display_name)
-            if flag:
-                flag_label = QLabel(flag)
-                flag_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                flag_label.setFont(QFont("Segoe UI Emoji", 14))
-                self.table.setCellWidget(row, _COL_FLAG, flag_label)
+            flag_cell = _make_flag_cell(srv, flag)
+            if flag_cell is not None:
+                self.table.setCellWidget(row, _COL_FLAG, flag_cell)
 
             item = QTableWidgetItem(display_name)
             item.setData(Qt.ItemDataRole.UserRole, srv.tag)

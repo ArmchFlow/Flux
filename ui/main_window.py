@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QTabWidget,
     QStatusBar, QLabel, QPushButton, QMessageBox,
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QRect, QEasingCurve, QPropertyAnimation, QAbstractAnimation
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QRect, QEasingCurve, QPropertyAnimation
 from PyQt6.QtGui import QCloseEvent, QIcon
 
 from .sub_tab import SubscriptionTab
@@ -188,7 +188,12 @@ class MainWindow(QMainWindow):
         self._tab_indicator.setObjectName("tabIndicator")
         self._tab_indicator.setFixedHeight(3)
         self._tab_indicator.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._tab_anim = None
         self._tabs.currentChanged.connect(self._animate_tab_indicator)
+        QTimer.singleShot(0, self._snap_tab_indicator)
+
+    def showEvent(self, event):
+        super().showEvent(event)
         QTimer.singleShot(0, self._snap_tab_indicator)
 
     def _tab_indicator_rect(self) -> QRect:
@@ -202,12 +207,16 @@ class MainWindow(QMainWindow):
 
     def _animate_tab_indicator(self, index: int):
         rect = self._tab_indicator_rect()
+        if self._tab_anim is not None:
+            self._tab_anim.stop()
         anim = QPropertyAnimation(self._tab_indicator, b"geometry")
         anim.setDuration(200)
         anim.setStartValue(self._tab_indicator.geometry())
         anim.setEndValue(rect)
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+        anim.finished.connect(self._tab_indicator.raise_)
+        self._tab_anim = anim
+        anim.start()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

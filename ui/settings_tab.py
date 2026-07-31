@@ -4,10 +4,12 @@ from PyQt6.QtWidgets import (
     QGroupBox, QCheckBox, QSpinBox, QLineEdit,
     QComboBox, QLabel, QScrollArea, QPushButton,
 )
-from PyQt6.QtCore import pyqtSignal, Qt, QPropertyAnimation, QEasingCurve, QAbstractAnimation
+from PyQt6.QtCore import pyqtSignal, Qt, QSize, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import QIcon
 
 from core.settings_manager import SettingsManager
 from core.translations import tr, set_language
+from .widgets import chevron_pixmap
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,7 @@ class SettingsTab(QWidget):
     def __init__(self, settings_mgr: SettingsManager, parent=None):
         super().__init__(parent)
         self.settings_mgr = settings_mgr
+        self._advanced_anim = None
         self._setup_ui()
         self._load_settings()
         self._apply_advanced_state(animated=False)
@@ -76,6 +79,7 @@ class SettingsTab(QWidget):
         self._advanced_btn = QPushButton()
         self._advanced_btn.setObjectName("advancedToggle")
         self._advanced_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._advanced_btn.setIconSize(QSize(14, 14))
         self._advanced_btn.clicked.connect(self._on_toggle_advanced)
         main_layout.addWidget(self._advanced_btn)
 
@@ -198,26 +202,30 @@ class SettingsTab(QWidget):
 
     def _update_advanced_btn_text(self):
         state = self.settings_mgr.settings.advanced_open
-        chevron = "\u25be" if state else "\u25b8"
-        self._advanced_btn.setText(f"{chevron}  {tr('advanced_settings')}")
+        self._advanced_btn.setIcon(QIcon(chevron_pixmap(down=state, size=14)))
+        self._advanced_btn.setText(tr("advanced_settings"))
 
     def _apply_advanced_state(self, animated: bool = True):
         open_state = self.settings_mgr.settings.advanced_open
         container = self._advanced_container
         if open_state:
+            container.show()
             if animated:
-                container.show()
-                container.setMaximumHeight(container.sizeHint().height())
+                container.setMaximumHeight(16777215)
+                target = container.sizeHint().height()
+                container.setMaximumHeight(0)
                 anim = QPropertyAnimation(container, b"maximumHeight")
                 anim.setDuration(250)
                 anim.setStartValue(0)
-                anim.setEndValue(container.sizeHint().height())
+                anim.setEndValue(max(1, target))
                 anim.setEasingCurve(QEasingCurve.Type.OutCubic)
                 anim.finished.connect(
                     lambda: container.setMaximumHeight(16777215))
-                anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+                if self._advanced_anim is not None:
+                    self._advanced_anim.stop()
+                self._advanced_anim = anim
+                anim.start()
             else:
-                container.show()
                 container.setMaximumHeight(16777215)
         else:
             if animated:
@@ -227,7 +235,11 @@ class SettingsTab(QWidget):
                 anim.setStartValue(container.sizeHint().height())
                 anim.setEndValue(0)
                 anim.setEasingCurve(QEasingCurve.Type.InCubic)
-                anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+                anim.finished.connect(container.hide)
+                if self._advanced_anim is not None:
+                    self._advanced_anim.stop()
+                self._advanced_anim = anim
+                anim.start()
             else:
                 container.setMaximumHeight(0)
                 container.hide()

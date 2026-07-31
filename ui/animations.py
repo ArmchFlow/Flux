@@ -254,6 +254,7 @@ class ToastManager(QObject):
         self._toasts.append(toast)
         toast.closed.connect(lambda: self._toasts.remove(toast))
         self._reposition_toasts()
+        toast.show()
 
     def _reposition_toasts(self):
         if not self._parent:
