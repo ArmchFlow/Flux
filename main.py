@@ -52,6 +52,40 @@ def find_icon(name: str) -> str:
     return ""
 
 
+def _ensure_admin():
+    if sys.platform == "win32":
+        import ctypes
+        if not ctypes.windll.shell32.IsUserAnAdmin():
+            ctypes.windll.shell32.ShellExecuteW(
+                None, "runas", sys.executable, " ".join(sys.argv), None, 1
+            )
+            sys.exit(0)
+
+
+def _import_standart_awg(sub_manager: SubscriptionManager, data_dir: Path):
+    """Import standart.conf on first run if no Amnezia servers exist."""
+    try:
+        has_awg = any(s.protocol == "awg" for s in sub_manager.get_all_servers())
+        if has_awg:
+            return
+
+        try:
+            base = Path(sys._MEIPASS)
+        except AttributeError:
+            base = Path(__file__).parent
+
+        conf_path = base / "bin" / "standart.conf"
+        if not conf_path.exists():
+            conf_path = base / "standart.conf"
+
+        if conf_path.exists():
+            srv = sub_manager.import_conf_file(str(conf_path))
+            if srv:
+                logging.getLogger("main").info("Imported default AWG config: %s", srv.name)
+    except Exception as e:
+        logging.getLogger("main").warning("Failed to import standart AWG config: %s", e)
+
+
 LOCK_PORT = 19876
 
 
@@ -84,6 +118,8 @@ def _listen_for_show(sock, win):
 
 
 def main():
+    _ensure_admin()
+
     lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     lock.settimeout(0.5)
     try:
@@ -137,6 +173,8 @@ def main():
     settings_mgr = SettingsManager(data_dir)
     set_language(settings_mgr.settings.language)
     sub_manager = SubscriptionManager(data_dir, vault)
+
+    _import_standart_awg(sub_manager, data_dir)
 
     sb_path = find_binary("sing-box.exe")
     xr_path = find_binary("xray.exe")

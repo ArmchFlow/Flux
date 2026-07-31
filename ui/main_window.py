@@ -55,11 +55,9 @@ class MainWindow(QMainWindow):
         if sys.platform == "win32":
             import ctypes
             kernel32 = ctypes.windll.kernel32
-            if not kernel32.AllocConsole():
-                kernel32.AttachConsole(-1)
-            kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 0)
-            ctypes.windll.user32.ShowWindow(
-                kernel32.GetConsoleWindow(), 0)
+            hwnd = kernel32.GetConsoleWindow()
+            if hwnd:
+                ctypes.windll.user32.ShowWindow(hwnd, 0)
 
         logger.info("Initializing MainWindow...")
         self.setWindowTitle("Flux")

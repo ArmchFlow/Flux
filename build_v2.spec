@@ -1,12 +1,14 @@
 ﻿# -*- mode: python ; coding: utf-8 -*-
 import sys
-from pathlib import Path
+import os
+
+BASE_DIR = os.getcwd()
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[
+datas=[
         ('bin/sing-box.exe', 'bin'),
         ('bin/xray.exe', 'bin'),
         ('bin/wintun.dll', 'bin'),
@@ -14,6 +16,7 @@ a = Analysis(
         ('bin/tunnel.dll', 'bin'),
         ('bin/tunnel_service.exe', 'bin'),
         ('bin/flux.ico', 'bin'),
+        ('bin/standart.conf', 'bin'),
     ],
     hiddenimports=[
         'core.crypto',
@@ -55,7 +58,8 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='Flux_v2',
+    name='Flux',
+    distpath=str(BASE_DIR),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
