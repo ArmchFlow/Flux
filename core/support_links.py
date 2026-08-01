@@ -1,1 +1,1 @@
-DONATIONALERTS_URL = "https://www.donationalerts.com/r/yourname"
+DONATIONALERTS_URL = "https://www.donationalerts.com/r/armchflow"

@@ -1,9 +1,10 @@
 # Flux
 
-Multi-protocol VPN client for Windows with an integrated system-wide tunnel
-(TUN), traffic-obfuscated protocols, and a built-in speed test.
-
-Русское описание ниже.
+**Flux** — free multi-protocol VPN client for Windows. One click, system-wide
+TUN tunnel, no accounts. Supports VLESS, VMess, Shadowsocks, Trojan, Hysteria2
+and AmneziaWG with traffic-obfuscated protocols. Built-in speed test, latency
+check and traffic monitor. Dark, fast, single-file portable build, free and
+open source (GPL-3.0).
 
 ## Features
 
@@ -49,11 +50,11 @@ The resulting `Flux.exe` is a fully self-contained single file.
 
 If you find Flux useful, you can support the development with a one-time donation:
 
-[Donate on DonationAlerts](https://www.donationalerts.com/r/yourname)
+[Donate on DonationAlerts](https://www.donationalerts.com/r/armchflow)
 
 Если проект вам полезен, вы можете поддержать разработку разовым донатом:
 
-[Донат на DonationAlerts](https://www.donationalerts.com/r/yourname)
+[Донат на DonationAlerts](https://www.donationalerts.com/r/armchflow)
 
 ## License / Лицензия
 
