@@ -1,10 +1,6 @@
 # Flux
 
-**Flux** — free multi-protocol VPN client for Windows. One click, system-wide
-TUN tunnel, no accounts. Supports VLESS, VMess, Shadowsocks, Trojan, Hysteria2
-and AmneziaWG with traffic-obfuscated protocols. Built-in speed test, latency
-check and traffic monitor. Dark, fast, single-file portable build, free and
-open source (GPL-3.0).
+**Flux** — быстрый и бесплатный VPN-клиент для Windows. Шесть протоколов: VLESS, VMess, Shadowsocks, Trojan, Hysteria2, AmneziaWG; системный TUN-туннель, тест скорости и пинг серверов встроены. Тёмный интерфейс, без аккаунтов, открытый исходный код..
 
 ## Features
 
