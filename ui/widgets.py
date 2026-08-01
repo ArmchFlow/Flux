@@ -154,7 +154,6 @@ class EmptyStateWidget(QWidget):
         self._subtitle.setObjectName("emptySubtitle")
         self._subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._subtitle.setWordWrap(True)
-        self._subtitle.setMaximumWidth(360)
         inner.addWidget(self._subtitle)
 
         self._action_btn = QPushButton()
