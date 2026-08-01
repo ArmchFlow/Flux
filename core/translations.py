@@ -173,6 +173,12 @@ _STRINGS = {
         "about_license_missing": "License file not found.",
         "about_third_party_missing": "Third-party notices file not found.",
         "about_close": "Close",
+        "support_project": "Support the project",
+        "support_title": "Support the Project",
+        "support_intro": "Flux is free and open-source. If you find it useful, please consider supporting development with a one-time donation.",
+        "support_da_desc": "One-time donations on DonationAlerts",
+        "support_open": "Open",
+        "support_close": "Close",
     },
     "ru": {
         "app_title": "Flux",
@@ -344,6 +350,12 @@ _STRINGS = {
         "about_license_missing": "Файл лицензии не найден.",
         "about_third_party_missing": "Файл уведомлений о сторонних компонентах не найден.",
         "about_close": "Закрыть",
+        "support_project": "Поддержать проект",
+        "support_title": "Поддержать проект",
+        "support_intro": "Flux — свободная программа с открытым исходным кодом. Если проект вам полезен, вы можете поддержать разработку разовым донатом.",
+        "support_da_desc": "Разовые донаты на DonationAlerts",
+        "support_open": "Открыть",
+        "support_close": "Закрыть",
     },
 }
 

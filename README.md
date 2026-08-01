@@ -45,6 +45,16 @@ python -m PyInstaller build_v2.spec
 
 The resulting `Flux.exe` is a fully self-contained single file.
 
+## Support / Поддержка
+
+If you find Flux useful, you can support the development with a one-time donation:
+
+[Donate on DonationAlerts](https://www.donationalerts.com/r/yourname)
+
+Если проект вам полезен, вы можете поддержать разработку разовым донатом:
+
+[Донат на DonationAlerts](https://www.donationalerts.com/r/yourname)
+
 ## License / Лицензия
 
 Flux is free software released under the **GNU General Public License v3.0**

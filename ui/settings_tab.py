@@ -7,11 +7,12 @@ from PyQt6.QtWidgets import (
     QComboBox, QLabel, QScrollArea, QPushButton,
     QDialog, QTabWidget, QTextBrowser,
 )
-from PyQt6.QtCore import pyqtSignal, Qt, QSize, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import pyqtSignal, Qt, QSize, QPropertyAnimation, QEasingCurve, QUrl
+from PyQt6.QtGui import QIcon, QDesktopServices
 
 from core.settings_manager import SettingsManager
 from core.translations import tr, set_language
+from core.support_links import DONATIONALERTS_URL
 from .widgets import chevron_pixmap
 
 logger = logging.getLogger(__name__)
@@ -209,6 +210,12 @@ class SettingsTab(QWidget):
         about_btn.clicked.connect(self._show_about)
         outer.addWidget(about_btn)
 
+        support_btn = QPushButton(tr("support_project"))
+        support_btn.setObjectName("ghostBtn")
+        support_btn.setMinimumHeight(32)
+        support_btn.clicked.connect(self._show_support)
+        outer.addWidget(support_btn)
+
     @staticmethod
     def _resource_path(name: str) -> Path:
         try:
@@ -257,6 +264,51 @@ class SettingsTab(QWidget):
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         close_btn = QPushButton(tr("about_close"))
+        close_btn.setObjectName("successBtn")
+        close_btn.setMinimumHeight(34)
+        close_btn.clicked.connect(dialog.accept)
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+
+        dialog.exec()
+
+    def _show_support(self):
+        dialog = QDialog(self)
+        dialog.setObjectName("aboutDialog")
+        dialog.setWindowTitle(tr("support_title"))
+        dialog.setModal(True)
+        dialog.setMinimumSize(440, 240)
+        dialog.resize(480, 280)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 20, 20, 16)
+        layout.setSpacing(12)
+
+        intro = QLabel(tr("support_intro"))
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        row = QHBoxLayout()
+        info = QVBoxLayout()
+        name = QLabel("DonationAlerts")
+        name.setObjectName("titleLabel")
+        desc = QLabel(tr("support_da_desc"))
+        desc.setWordWrap(True)
+        desc.setObjectName("subtitleLabel")
+        info.addWidget(name)
+        info.addWidget(desc)
+        row.addLayout(info, 1)
+        open_btn = QPushButton(tr("support_open"))
+        open_btn.setObjectName("successBtn")
+        open_btn.setMinimumHeight(34)
+        open_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl(DONATIONALERTS_URL)))
+        row.addWidget(open_btn, 0, Qt.AlignmentFlag.AlignBottom)
+        layout.addLayout(row)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        close_btn = QPushButton(tr("support_close"))
         close_btn.setObjectName("successBtn")
         close_btn.setMinimumHeight(34)
         close_btn.clicked.connect(dialog.accept)
